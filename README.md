@@ -2,6 +2,8 @@
 
 A work order management application built with .NET 10.0 implementing Onion Architecture. The system uses Blazor WebAssembly for the UI, Entity Framework Core for data access, MediatR for CQRS, and deploys to Azure Container Apps.
 
+In this fork, Codefresh builds each commit, Octopus Deploy promotes releases through tdd, uat and prod, and Argo CD applies them to AKS (environment repository `clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh`).
+
 This codebase serves as both a working application and a teaching reference for software architecture. The 51 architectural patterns cataloged below are all demonstrated in the source code.
 
 ## Getting Started

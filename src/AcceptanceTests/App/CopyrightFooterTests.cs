@@ -90,7 +90,7 @@ public class CopyrightFooterTests : AcceptanceTestBase
         var href = await gitSha.GetAttributeAsync("href");
         if (href is not null)
         {
-            href.ShouldContain("github.com/ClearMeasureLabs/bootcamp-palermo-workorders/commit/");
+            href.ShouldContain("github.com/clearmeasure-aisf-sample-apps/20260923-001/commit/");
         }
     }
 
