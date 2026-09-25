@@ -61,7 +61,8 @@ public static class Extensions
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
-                    .AddMeter("ChurchBulletin.Application");
+                    .AddMeter("ChurchBulletin.Application")
+                    .AddMeter("NServiceBus.Core.Pipeline.Incoming");
             })
             .WithTracing(tracing =>
             {
