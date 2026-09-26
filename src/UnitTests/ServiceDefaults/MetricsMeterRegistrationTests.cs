@@ -29,7 +29,7 @@ public class MetricsMeterRegistrationTests
     private static List<string> CollectExportedMeterNames(string meterName)
     {
         var exporter = new StubMetricExporter();
-        using var reader = new BaseExportingMetricReader(exporter);
+        var reader = new BaseExportingMetricReader(exporter);
         var builder = Host.CreateApplicationBuilder();
         builder.AddServiceDefaults();
         builder.Services.ConfigureOpenTelemetryMeterProvider(metrics => metrics.AddReader(reader));
