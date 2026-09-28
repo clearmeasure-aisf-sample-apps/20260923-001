@@ -321,18 +321,38 @@ Function PackageDatabase {
 }
 
 Function PackageAcceptanceTests {
-	# Use Debug configuration so full symbols are available to display better error messages in test failures
-	exec {
-		& dotnet publish $acceptanceTestProjectPath -nologo --no-restore -v $verbosity --configuration Debug
+	# The package is consumed only on linux-x64 (Octopus step image platform/ci-dotnet, which ships
+	# Chromium for Playwright under PLAYWRIGHT_BROWSERS_PATH=/ms-playwright). Microsoft.Playwright
+	# needs just .playwright/node/<platform>/node and .playwright/package at runtime; browsers are
+	# never part of .playwright. Publishing for one platform drops the other four Node drivers
+	# (~410 MB) that the csproj's PlaywrightPlatform=all brings into local build output.
+	$playwrightPackagePlatform = "linux-x64"
+	$publishDir = Join-PathSegments $acceptanceTestProjectPath "bin" "Debug" $framework "publish"
+	$publishedPlaywrightDir = Join-Path $publishDir ".playwright"
+
+	# A stale publish directory would keep drivers from an earlier all-platform publish.
+	if (Test-Path $publishedPlaywrightDir) {
+		Remove-Item -Path $publishedPlaywrightDir -Recurse -Force
 	}
 
-	# Copy the .playwright metadata folder into the publish output so the nupkg
-	# is self-contained.  The playwright.ps1 install command needs this folder to
-	# know which browser versions to download on the target machine.
-	$publishDir = Join-PathSegments $acceptanceTestProjectPath "bin" "Debug" $framework "publish"
-	$playwrightSource = Join-PathSegments $acceptanceTestProjectPath "bin" "Debug" $framework ".playwright"
-	if (Test-Path $playwrightSource) {
-		Copy-Item -Path $playwrightSource -Destination (Join-Path $publishDir ".playwright") -Recurse -Force
+	# Use Debug configuration so full symbols are available to display better error messages in test failures
+	exec {
+		& dotnet publish $acceptanceTestProjectPath -nologo --no-restore -v $verbosity --configuration Debug -p:PlaywrightPlatform=$playwrightPackagePlatform
+	}
+
+	$requiredPlaywrightFiles = @(
+		(Join-PathSegments $publishedPlaywrightDir "node" $playwrightPackagePlatform "node"),
+		(Join-PathSegments $publishedPlaywrightDir "package" "cli.js"),
+		(Join-PathSegments $publishedPlaywrightDir "package" "browsers.json")
+	)
+	foreach ($requiredFile in $requiredPlaywrightFiles) {
+		if (-not (Test-Path $requiredFile)) {
+			throw "Playwright runtime file missing from acceptance test publish output: $requiredFile"
+		}
+	}
+	$extraDrivers = Get-ChildItem -Path (Join-Path $publishedPlaywrightDir "node") -Directory | Where-Object { $_.Name -ne $playwrightPackagePlatform }
+	if ($extraDrivers) {
+		throw "Unexpected Playwright drivers in acceptance test publish output: $($extraDrivers.Name -join ', ')"
 	}
 
 	exec {
