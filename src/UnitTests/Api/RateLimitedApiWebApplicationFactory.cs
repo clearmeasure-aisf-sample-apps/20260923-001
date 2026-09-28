@@ -1,6 +1,7 @@
 using ClearMeasure.Bootcamp.UI.Server;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,6 +24,7 @@ public sealed class RateLimitedApiWebApplicationFactory : WebApplicationFactory<
     {
         // Avoid appsettings.Development.json (LocalDB) which overrides in-memory SQLite on Linux.
         builder.UseEnvironment("Testing");
+        builder.ConfigureTestServices(NServiceBusTestHost.RemoveNServiceBusHostedService);
         // Host settings are visible to Program.cs before merged app configuration from WebApplicationFactory.
         builder.UseSetting("ConnectionStrings:SqlConnectionString", _sqlConnectionString);
         builder.UseSetting("ApiRateLimiting:Enabled", "true");
