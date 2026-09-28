@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net;
 using ClearMeasure.Bootcamp.UI.Server.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Shouldly;
 
 namespace ClearMeasure.Bootcamp.UnitTests.Api;
@@ -33,6 +35,17 @@ public class ApiRateLimitingWebTests
         ra.First().ShouldBe("60");
         limited.Content.Headers.ContentType?.MediaType.ShouldBe("text/plain");
         (await limited.Content.ReadAsStringAsync()).ShouldBe("Too many requests. Please try again later.");
+    }
+
+    [Test]
+    public async Task Should_RemoveNServiceBusHostedService_When_HostingRateLimitTests()
+    {
+        await using var factory = new TunableApiRateLimitWebApplicationFactory(StrictLimitSettings(5));
+        using var client = factory.CreateClient();
+
+        factory.Services.GetServices<IHostedService>()
+            .Select(service => service.GetType().FullName ?? string.Empty)
+            .ShouldNotContain(name => name.StartsWith("NServiceBus", StringComparison.Ordinal));
     }
 
     [Test]
