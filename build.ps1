@@ -85,8 +85,13 @@ Function Init {
 
 	New-Item -Path $build_dir -ItemType Directory -Force | Out-Null
 
-	exec {
-		& dotnet clean $solutionName -nologo -v $verbosity /p:SuppressNETCoreSdkPreviewMessage=true
+	if ($script:skipClean) {
+		Log-Message -Message "Skipping dotnet clean (ACCEPTANCE_SKIP_CLEAN=true); Compile will build incrementally." -Type "INFO"
+	}
+	else {
+		exec {
+			& dotnet clean $solutionName -nologo -v $verbosity /p:SuppressNETCoreSdkPreviewMessage=true
+		}
 	}
 
 	exec {
@@ -95,9 +100,15 @@ Function Init {
 }
 
 Function Compile {
+	# --no-incremental forces a full rebuild; dropped only when Init skipped the clean
+	# (ACCEPTANCE_SKIP_CLEAN=true), so MSBuild reuses up-to-date outputs from this checkout.
+	$incrementalArgs = @()
+	if (-not $script:skipClean) {
+		$incrementalArgs = @("--no-incremental")
+	}
 	exec {
 		& dotnet build $solutionName -nologo --no-restore -v `
-			$verbosity -maxcpucount --configuration $projectConfig --no-incremental `
+			$verbosity -maxcpucount --configuration $projectConfig @incrementalArgs `
 			/p:TreatWarningsAsErrors="true" `
 			/p:MSBuildTreatAllWarningsAsErrors="true" `
 			/p:SuppressNETCoreSdkPreviewMessage=true `
@@ -463,8 +474,7 @@ Function AcceptanceTests {
 		& dotnet test /p:CopyLocalLockFileAssemblies=true -nologo -v minimal --logger:trx `
 				--results-directory $(Join-Path $test_dir "AcceptanceTests") --no-build `
 				--no-restore --configuration $projectConfig `
-				--settings:$runSettingsPath `
-				--collect:"XPlat Code Coverage"
+				--settings:$runSettingsPath
 		}
 	}
 	finally {
@@ -499,10 +509,18 @@ Function Invoke-AcceptanceTests {
 		$script:databaseName = Get-ResolvedDatabaseName -explicitName $databaseName -baseName $projectName -onLinux (Test-IsLinux) -localBuild (Test-IsLocalBuild)
 	}
 
-	Init
-	Compile
-	Setup-DatabaseForBuild
-	AcceptanceTests
+	# Opt-in: ACCEPTANCE_SKIP_CLEAN=true skips 'dotnet clean' and does an incremental Compile,
+	# reusing a Release build already present in this checkout. Default keeps the full clean rebuild.
+	$script:skipClean = ($env:ACCEPTANCE_SKIP_CLEAN -eq "true")
+	try {
+		Init
+		Compile
+		Setup-DatabaseForBuild
+		AcceptanceTests
+	}
+	finally {
+		$script:skipClean = $false
+	}
 
 	$sw.Stop()
 	$elapsed = $sw.Elapsed.ToString()
