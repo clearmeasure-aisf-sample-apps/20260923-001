@@ -535,6 +535,7 @@ public class ServerFixture
         await ProcessCleanupHelper.StopServerProcessAsync(_serverProcess, ApplicationBaseUrl);
         try { _serverProcess?.Dispose(); } catch (ObjectDisposedException) { }
         _serverProcess = null;
+        await BrowserPool.CloseAllAsync();
         Playwright.Dispose();
     }
 }

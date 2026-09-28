@@ -6,6 +6,7 @@ using ClearMeasure.Bootcamp.UI.Shared;
 using ClearMeasure.Bootcamp.UI.Shared.Components;
 using ClearMeasure.Bootcamp.UI.Shared.Pages;
 using System.Collections.Concurrent;
+using NUnit.Framework.Interfaces;
 using Login = ClearMeasure.Bootcamp.UI.Shared.Pages.Login;
 
 // ReSharper disable MethodHasAsyncOverload -- Qodana C6 (#9039): Playwright/NUnit sync APIs are the
@@ -21,14 +22,14 @@ public class TestState
 {
     public required IPage Page { get; init; }
     public required IBrowserContext BrowserContext { get; init; }
-    public required IBrowser Browser { get; init; }
+    public bool Tracing { get; init; }
     public Employee CurrentUser { get; init; } = null!;
     public required string TestTag { get; init; }
 }
 
 /// <summary>
 /// Base class for acceptance tests supporting parallel execution with ParallelScope.Children.
-/// Each test gets its own browser, page, user, and test tag for complete isolation.
+/// Each test gets its own browser context (on a per-worker shared browser), page, user, and test tag for complete isolation.
 /// Does not inherit from PageTest to avoid thread-safety issues with Playwright's internal collections.
 /// </summary>
 public abstract class AcceptanceTestBase
@@ -72,8 +73,6 @@ public abstract class AcceptanceTestBase
     /// </summary>
     protected string TestTag => State.TestTag;
 
-    private static readonly Random RandomPosition = new();
-
     protected virtual bool RequiresBrowser => true;
 
     [SetUp]
@@ -84,14 +83,7 @@ public abstract class AcceptanceTestBase
         var testTag = Guid.NewGuid().ToString("N")[..8];
         var currentUser = CreateTestUser(testTag);
 
-        var x = RandomPosition.Next(0, 1200);
-        var y = RandomPosition.Next(0, 700);
-        var browser = await ServerFixture.Playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = Headless,
-            SlowMo = ServerFixture.SlowMo,
-            Args = [$"--window-position={x},{y}", "--window-size=800,600"]
-        });
+        var browser = await BrowserPool.GetForCurrentWorkerAsync(Headless, ServerFixture.SlowMo);
 
         var browserContext = await browser.NewContextAsync(new BrowserNewContextOptions
         {
@@ -101,13 +93,17 @@ public abstract class AcceptanceTestBase
         });
         browserContext.SetDefaultTimeout(60_000);
         
-        await browserContext.Tracing.StartAsync(new TracingStartOptions
+        var tracing = ShouldTrace(TraceModeSettings.Current, TestContext.CurrentContext.CurrentRepeatCount);
+        if (tracing)
         {
-            Title = $"{TestContext.CurrentContext.Test.ClassName}.{TestContext.CurrentContext.Test.Name}",
-            Screenshots = true,
-            Snapshots = true,
-            Sources = true
-        });
+            await browserContext.Tracing.StartAsync(new TracingStartOptions
+            {
+                Title = $"{TestContext.CurrentContext.Test.ClassName}.{TestContext.CurrentContext.Test.Name}",
+                Screenshots = true,
+                Snapshots = true,
+                Sources = true
+            });
+        }
 
         var page = await browserContext.NewPageAsync().ConfigureAwait(false);
         
@@ -115,7 +111,7 @@ public abstract class AcceptanceTestBase
         {
             Page = page,
             BrowserContext = browserContext,
-            Browser = browser,
+            Tracing = tracing,
             CurrentUser = currentUser,
             TestTag = testTag
         };
@@ -145,17 +141,31 @@ public abstract class AcceptanceTestBase
         if (!TestStates.TryRemove(TestId, out var state))
             return;
 
-        await SafeStopTracingAsync(state);
+        if (state.Tracing)
+        {
+            var failed = TestContext.CurrentContext.Result.Outcome.Status == TestStatus.Failed;
+            await SafeStopTracingAsync(state, save: failed || TraceModeSettings.Current == TraceMode.On);
+        }
+
         await SafeCloseAsync(() => state.Page.CloseAsync(), "Page");
         await SafeCloseAsync(() => state.BrowserContext.CloseAsync(), "BrowserContext");
-        await SafeCloseAsync(() => state.Browser.CloseAsync(), "Browser");
     }
 
-    private async Task SafeStopTracingAsync(TestState state)
+    /// <summary>
+    /// Decides whether a test attempt records a Playwright trace under the given mode.
+    /// </summary>
+    internal static bool ShouldTrace(TraceMode mode, int repeatCount) => mode switch
+    {
+        TraceMode.On or TraceMode.RetainOnFailure => true,
+        TraceMode.OnFirstRetry => repeatCount > 0,
+        _ => false
+    };
+
+    private async Task SafeStopTracingAsync(TestState state, bool save)
     {
         try
         {
-            await state.BrowserContext.Tracing.StopAsync(new TracingStopOptions
+            await state.BrowserContext.Tracing.StopAsync(!save ? new TracingStopOptions() : new TracingStopOptions
             {
                 Path = Path.Combine(TestContext.CurrentContext.WorkDirectory, "playwright-traces",
                     $"{TestContext.CurrentContext.Test.ClassName}.{TestContext.CurrentContext.Test.Name}.zip")
