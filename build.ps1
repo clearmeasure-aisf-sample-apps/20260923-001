@@ -171,6 +171,75 @@ Function IntegrationTest {
 	}
 }
 
+Function Test-SerialTestsRequested {
+	return ($env:BUILD_SERIAL_TESTS -eq "true")
+}
+
+Function Invoke-UnitAndIntegrationTests {
+	# Runs UnitTests concurrently with Setup-DatabaseForBuild + IntegrationTest.
+	# Set BUILD_SERIAL_TESTS=true to run them one after the other (debugging).
+	if (Test-SerialTestsRequested) {
+		Log-Message -Message "BUILD_SERIAL_TESTS=true - running unit and integration tests serially" -Type "INFO"
+		UnitTests
+		Setup-DatabaseForBuild
+		IntegrationTest
+		return
+	}
+
+	$unitResultsDir = Join-Path $test_dir "UnitTests"
+	$unitArgs = @(
+		"test", "/p:CopyLocalLockFileAssemblies=true", "-nologo", "-v", $verbosity, "--logger:trx",
+		"--results-directory", $unitResultsDir, "--no-build",
+		"--no-restore", "--configuration", $projectConfig,
+		"--settings:$coverletRunSettings",
+		"--collect:XPlat Code Coverage"
+	)
+
+	Log-Message -Message "Starting unit tests in background (parallel with integration tests)" -Type "INFO"
+	$unitJob = Start-Job -ScriptBlock {
+		param($workDir, $testArgs)
+		Set-Location -LiteralPath $workDir
+		& dotnet @testArgs 2>&1 | ForEach-Object { "[UnitTests] $_" }
+		"__EXITCODE__:$LASTEXITCODE"
+	} -ArgumentList $unitTestProjectPath, $unitArgs
+
+	$integrationError = $null
+	try {
+		Setup-DatabaseForBuild
+		IntegrationTest
+	}
+	catch {
+		$integrationError = $_
+	}
+
+	Wait-Job -Job $unitJob | Out-Null
+	$unitOutput = @(Receive-Job -Job $unitJob -ErrorAction Continue)
+	$unitJobState = $unitJob.State
+	Remove-Job -Job $unitJob -Force
+
+	$unitExitCode = -1
+	foreach ($line in $unitOutput) {
+		$text = [string]$line
+		if ($text -match '^__EXITCODE__:(-?\d+)$') {
+			$unitExitCode = [int]$Matches[1]
+		}
+		else {
+			Write-Host $text
+		}
+	}
+
+	$failures = @()
+	if ($unitJobState -ne "Completed" -or $unitExitCode -ne 0) {
+		$failures += "Unit tests failed (exit code $unitExitCode, job state $unitJobState)"
+	}
+	if ($null -ne $integrationError) {
+		$failures += "Integration tests failed: $integrationError"
+	}
+	if ($failures.Count -gt 0) {
+		throw ($failures -join [Environment]::NewLine)
+	}
+}
+
 Function Package-Everything{
 
 	# Allow Octopus.DotNet.Cli (targets net6.0) to run on the current .NET SDK
@@ -221,9 +290,7 @@ Function Build {
 
 	Init
 	Compile
-	UnitTests
-	Setup-DatabaseForBuild
-	IntegrationTest
+	Invoke-UnitAndIntegrationTests
 
 	$script:buildStopwatch.Stop()
 	$elapsed = $script:buildStopwatch.Elapsed.ToString()
@@ -246,9 +313,7 @@ Function Invoke-CIBuild {
 
 	Init
 	Compile
-	UnitTests
-	Setup-DatabaseForBuild
-	IntegrationTest
+	Invoke-UnitAndIntegrationTests
 
 	$script:buildStopwatch.Stop()
 	$elapsed = $script:buildStopwatch.Elapsed.ToString()
