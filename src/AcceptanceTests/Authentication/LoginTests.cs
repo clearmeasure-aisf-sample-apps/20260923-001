@@ -293,8 +293,7 @@ public class LoginTests : AcceptanceTestBase
     {
         await LoginAsLovejoyViaShortcutAsync();
 
-        await Click(nameof(Logout.Elements.LogoutLink));
-        await Page.WaitForURLAsync("**/login");
+        await LogoutAndWaitForLoginPageAsync();
 
         await Expect(Page.GetByTestId(nameof(LoginLink.Elements.LoginLink))).ToBeVisibleAsync();
         await Expect(Page.GetByTestId(nameof(Logout.Elements.WelcomeText))).ToHaveCountAsync(0);
@@ -328,8 +327,7 @@ public class LoginTests : AcceptanceTestBase
     public async Task Should_RemainAnonymous_WhenHardNavigatingHomeAfterHealthcheckAfterLogout()
     {
         await LoginAsLovejoyViaShortcutAsync();
-        await Click(nameof(Logout.Elements.LogoutLink));
-        await Page.WaitForURLAsync("**/login");
+        await LogoutAndWaitForLoginPageAsync();
         (await GetPersistedUsernameAsync()).ShouldBeNull();
 
         await Page.GotoAsync(ServerFixture.ApplicationBaseUrl + "/_healthcheck");
@@ -346,8 +344,7 @@ public class LoginTests : AcceptanceTestBase
     public async Task Should_PersistGwillie_NotTlovejoy_WhenSwitchingUserAfterLogout()
     {
         await LoginAsLovejoyViaShortcutAsync();
-        await Click(nameof(Logout.Elements.LogoutLink));
-        await Page.WaitForURLAsync("**/login");
+        await LogoutAndWaitForLoginPageAsync();
         (await GetPersistedUsernameAsync()).ShouldBeNull();
 
         await Page.GotoAsync(ServerFixture.ApplicationBaseUrl + "/");
@@ -409,6 +406,26 @@ public class LoginTests : AcceptanceTestBase
 
         await Expect(Page.GetByTestId(nameof(Logout.Elements.WelcomeText)))
             .ToHaveTextAsync("Welcome tlovejoy!");
+    }
+
+    /// <summary>
+    /// Clicks Logout and waits for /login, clicking again when the first click landed before the button's handler was
+    /// attached (the page never left; a single 60 s wait then timed out, and Retry does not retry a TimeoutException).
+    /// </summary>
+    private async Task LogoutAndWaitForLoginPageAsync()
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            await Click(nameof(Logout.Elements.LogoutLink));
+            try
+            {
+                await Page.WaitForURLAsync("**/login", new PageWaitForURLOptions { Timeout = 15_000 });
+                return;
+            }
+            catch (TimeoutException) when (attempt < 3 && !Page.Url.Contains("/login", StringComparison.Ordinal))
+            {
+            }
+        }
     }
 
     private async Task EnsureAnonymousHomeAsync()
