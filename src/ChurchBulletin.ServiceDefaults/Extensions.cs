@@ -88,7 +88,8 @@ public static class Extensions
 
         builder.AddOpenTelemetryExporters(otelBuilder);
 
-        if (builder.Environment.IsDevelopment())
+        if (builder.Environment.IsDevelopment()
+            && LocalTelemetryOptions.FromConfiguration(builder.Configuration).Enabled)
         {
             builder.Services.AddSingleton<LocalTelemetryFileWriter>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<LocalTelemetryFileWriter>());

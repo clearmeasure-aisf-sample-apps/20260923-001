@@ -27,15 +27,12 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
 
     private readonly ActivityListener _activityListener;
     private readonly MeterListener _meterListener;
-    private readonly Lock _tracesLock = new();
-    private readonly Lock _eventsLock = new();
-    private readonly object _logsLock = new();
-    private readonly Lock _metricsLock = new();
+    private readonly LocalTelemetryOptions _options;
 
-    private StreamWriter? _tracesWriter;
-    private StreamWriter? _eventsWriter;
-    private StreamWriter? _logsWriter;
-    private StreamWriter? _metricsWriter;
+    private RotatingJsonlFileWriter? _tracesWriter;
+    private RotatingJsonlFileWriter? _eventsWriter;
+    private RotatingJsonlFileWriter? _logsWriter;
+    private RotatingJsonlFileWriter? _metricsWriter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalTelemetryFileWriter"/> class.
@@ -60,6 +57,8 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
         _meterListener.SetMeasurementEventCallback<double>(OnMeasurementRecorded);
         _meterListener.SetMeasurementEventCallback<decimal>(OnMeasurementRecorded);
 
+        _options = LocalTelemetryOptions.FromConfiguration(configuration);
+
         var configuredPath = configuration?["LocalTelemetry:LogDirectory"];
 
         if (!string.IsNullOrEmpty(configuredPath))
@@ -81,12 +80,13 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
         }
 
         CleanupOldFiles();
+        TelemetryFileMaintenance.EnforceTotalSizeCap(TelemetryLogDirectory, _options.MaxTotalSizeBytes);
 
-        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd");
-        _tracesWriter = new StreamWriter(Path.Combine(TelemetryLogDirectory, $"traces_{timestamp}.jsonl"), append: true) { AutoFlush = true };
-        _eventsWriter = new StreamWriter(Path.Combine(TelemetryLogDirectory, $"events_{timestamp}.jsonl"), append: true) { AutoFlush = true };
-        _logsWriter = new StreamWriter(Path.Combine(TelemetryLogDirectory, $"logs_{timestamp}.jsonl"), append: true) { AutoFlush = true };
-        _metricsWriter = new StreamWriter(Path.Combine(TelemetryLogDirectory, $"metrics_{timestamp}.jsonl"), append: true) { AutoFlush = true };
+        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        _tracesWriter = CreateWriter("traces", timestamp);
+        _eventsWriter = CreateWriter("events", timestamp);
+        _logsWriter = CreateWriter("logs", timestamp);
+        _metricsWriter = CreateWriter("metrics", timestamp);
 
         ActivitySource.AddActivityListener(_activityListener);
         _meterListener.Start();
@@ -102,6 +102,9 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
             // Expected when stopping
         }
     }
+
+    private RotatingJsonlFileWriter CreateWriter(string prefix, string timestamp) =>
+        new(TelemetryLogDirectory, prefix, timestamp, _options.MaxFileSizeBytes, _options.MaxTotalSizeBytes);
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
@@ -127,38 +130,14 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
     {
         if (_tracesWriter == null) return;
 
-        var entry = TraceEntryMapper.FromActivity(activity, status);
-
-        lock (_tracesLock)
-        {
-            try
-            {
-                _tracesWriter.WriteLine(JsonSerializer.Serialize(entry, JsonOptions));
-            }
-            catch (Exception)
-            {
-                // Ignore write errors to prevent affecting application
-            }
-        }
+        WriteJsonLine(_tracesWriter, TraceEntryMapper.FromActivity(activity, status));
     }
 
     public void WriteEventEntry(Activity activity, ActivityEvent evt)
     {
         if (_eventsWriter == null) return;
 
-        var entry = new EventEntry(activity, evt);
-
-        lock (_eventsLock)
-        {
-            try
-            {
-                _eventsWriter.WriteLine(JsonSerializer.Serialize(entry, JsonOptions));
-            }
-            catch (Exception)
-            {
-                // Ignore write errors to prevent affecting application
-            }
-        }
+        WriteJsonLine(_eventsWriter, new EventEntry(activity, evt));
     }
 
     public void WriteLogEntry(LogLevel level, string category, string message, Exception? exception = null)
@@ -168,7 +147,7 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
             return;
         }
 
-        WriteJsonLine(_logsWriter, _logsLock, CreateLogEntry(level, category, message, exception));
+        WriteJsonLine(_logsWriter, CreateLogEntry(level, category, message, exception));
     }
 
     private static LogEntry CreateLogEntry(LogLevel level, string category, string message, Exception? exception) =>
@@ -181,18 +160,15 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
             Exception = exception == null ? null : new LogEntryError(exception)
         };
 
-    private void WriteJsonLine(StreamWriter writer, object gate, object entry)
+    private static void WriteJsonLine<T>(RotatingJsonlFileWriter writer, T entry)
     {
-        lock (gate)
+        try
         {
-            try
-            {
-                writer.WriteLine(JsonSerializer.Serialize(entry, JsonOptions));
-            }
-            catch (Exception)
-            {
-                // Best-effort local telemetry file writes must never affect the application.
-            }
+            writer.WriteLine(JsonSerializer.Serialize(entry, JsonOptions));
+        }
+        catch (Exception)
+        {
+            // Best-effort local telemetry file writes must never affect the application.
         }
     }
 
@@ -200,19 +176,7 @@ public class LocalTelemetryFileWriter : BackgroundService, IAsyncDisposable
     {
         if (_metricsWriter == null) return;
 
-        var entry = new MetricEntry(name, value, unit, tags);
-
-        lock (_metricsLock)
-        {
-            try
-            {
-                _metricsWriter.WriteLine(JsonSerializer.Serialize(entry, JsonOptions));
-            }
-            catch (Exception)
-            {
-                // Ignore write errors to prevent affecting application
-            }
-        }
+        WriteJsonLine(_metricsWriter, new MetricEntry(name, value, unit, tags));
     }
 
     private void CleanupOldFiles(int retentionDays = 7) =>
