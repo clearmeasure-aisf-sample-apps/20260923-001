@@ -24,13 +24,13 @@ public sealed record LocalTelemetryOptions
     public const long DefaultMaxTotalSizeBytes = 200L * 1024 * 1024;
 
     /// <summary>Whether the file writer is registered. Defaults to <c>true</c>.</summary>
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; private init; } = true;
 
     /// <summary>Size at which a file is rotated.</summary>
-    public long MaxFileSizeBytes { get; init; } = DefaultMaxFileSizeBytes;
+    public long MaxFileSizeBytes { get; private init; } = DefaultMaxFileSizeBytes;
 
     /// <summary>Total folder size above which the oldest files are deleted.</summary>
-    public long MaxTotalSizeBytes { get; init; } = DefaultMaxTotalSizeBytes;
+    public long MaxTotalSizeBytes { get; private init; } = DefaultMaxTotalSizeBytes;
 
     /// <summary>
     /// Reads options from configuration, falling back to defaults for missing or invalid values.

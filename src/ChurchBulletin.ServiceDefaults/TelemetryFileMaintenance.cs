@@ -34,34 +34,34 @@ internal static class TelemetryFileMaintenance
                 .OrderBy(f => f.LastWriteTimeUtc)
                 .ToList();
             var total = files.Sum(f => f.Length);
+            var keepFullPath = Path.GetFullPath(keepPath ?? string.Empty);
 
-            foreach (var file in files)
+            foreach (var file in files.TakeWhile(_ => total > maxTotalBytes))
             {
-                if (total <= maxTotalBytes)
+                if (!string.Equals(file.FullName, keepFullPath, StringComparison.Ordinal))
                 {
-                    return;
-                }
-
-                if (string.Equals(file.FullName, Path.GetFullPath(keepPath ?? string.Empty), StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    var length = file.Length;
-                    file.Delete();
-                    total -= length;
-                }
-                catch
-                {
-                    // File may be open by another writer (Windows); skip it.
+                    total -= TryDelete(file);
                 }
             }
         }
         catch
         {
             // Ignore cleanup errors
+        }
+    }
+
+    // Returns the bytes freed; a file open by another writer (Windows) is skipped.
+    private static long TryDelete(FileInfo file)
+    {
+        try
+        {
+            var length = file.Length;
+            file.Delete();
+            return length;
+        }
+        catch
+        {
+            return 0;
         }
     }
 
