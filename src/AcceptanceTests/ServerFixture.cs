@@ -285,6 +285,7 @@ public class ServerFixture
     {
         process.StartInfo.Environment["DISABLE_AUTO_CANCEL_AGENT"] = "true";
         process.StartInfo.Environment["ApiKeyAuthentication__Enabled"] = "false";
+        process.StartInfo.Environment["LocalTelemetry__Enabled"] = "false";
         process.StartInfo.Environment["ApiKeyAuthentication__ValidationKey"] = "";
         if (useSqlite)
         {
@@ -402,6 +403,7 @@ public class ServerFixture
         process.StartInfo.Environment["RemotableBus__ApiUrl"] =
             $"{ApplicationBaseUrl}/api/blazor-wasm-single-api";
         process.StartInfo.Environment["DOTNET_ENVIRONMENT"] = "Development";
+        process.StartInfo.Environment["LocalTelemetry__Enabled"] = "false";
         process.StartInfo.Environment["DISABLE_AUTO_CANCEL_AGENT"] = "true";
         process.StartInfo.Environment["APPLICATIONINSIGHTS_CONNECTION_STRING"] =
             "InstrumentationKey=00000000-0000-0000-0000-000000000000";

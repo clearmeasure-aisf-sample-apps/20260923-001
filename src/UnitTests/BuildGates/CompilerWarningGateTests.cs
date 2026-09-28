@@ -60,7 +60,8 @@ public class CompilerWarningGateTests
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <TargetFramework>net10.0</TargetFramework>
-                    <OutputType>Exe</OutputType>
+                    <OutputType>Library</OutputType>
+                    <UseAppHost>false</UseAppHost>
                   </PropertyGroup>
                 </Project>
                 """);
@@ -68,12 +69,13 @@ public class CompilerWarningGateTests
                 Path.Combine(projectDirectory, "Program.cs"),
                 """
                 #warning Warning gate contract
-                System.Console.WriteLine("warning gate");
+                internal static class WarningGate;
                 """);
 
             var ordinaryBuild = await RunDotNetBuild(projectDirectory);
             var strictBuild = await RunDotNetBuild(
                 projectDirectory,
+                "--no-restore",
                 "/p:TreatWarningsAsErrors=true",
                 "/p:MSBuildTreatAllWarningsAsErrors=true");
 
