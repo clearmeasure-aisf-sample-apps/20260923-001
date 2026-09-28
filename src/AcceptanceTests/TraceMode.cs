@@ -31,7 +31,7 @@ public static class TraceModeSettings
     /// <summary>
     /// Parses a PLAYWRIGHT_TRACE value; unknown or empty values yield <see cref="TraceMode.RetainOnFailure"/>.
     /// </summary>
-    public static TraceMode Parse(string? value) => value?.Trim().ToLowerInvariant() switch
+    private static TraceMode Parse(string? value) => value?.Trim().ToLowerInvariant() switch
     {
         "off" or "0" or "false" => TraceMode.Off,
         "on" or "1" or "true" => TraceMode.On,

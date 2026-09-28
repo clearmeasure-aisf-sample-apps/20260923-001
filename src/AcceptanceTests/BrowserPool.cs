@@ -79,7 +79,7 @@ public static class BrowserPool
         }
         catch (Exception ex)
         {
-            TestContext.Out.WriteLine($"BrowserPool: ignoring browser close failure: {ex.GetType().Name}: {ex.Message}");
+            await TestContext.Out.WriteLineAsync($"BrowserPool: ignoring browser close failure: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

@@ -154,7 +154,7 @@ public abstract class AcceptanceTestBase
     /// <summary>
     /// Decides whether a test attempt records a Playwright trace under the given mode.
     /// </summary>
-    internal static bool ShouldTrace(TraceMode mode, int repeatCount) => mode switch
+    private static bool ShouldTrace(TraceMode mode, int repeatCount) => mode switch
     {
         TraceMode.On or TraceMode.RetainOnFailure => true,
         TraceMode.OnFirstRetry => repeatCount > 0,
