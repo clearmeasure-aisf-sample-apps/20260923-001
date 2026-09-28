@@ -12,8 +12,10 @@
 		<Configurations>Debug;Release;exclude-maui.slnf</Configurations>
 		<UserSecretsId>dotnet-Worker-b9b5c0f8-4249-469b-8bfb-c4cc9398b886</UserSecretsId>
 
-		<!-- Include Playwright drivers for all platforms so the nupkg works
-		     when built on Linux and extracted on Windows (TDD deploy). -->
+		<!-- Local build output carries Playwright drivers for all platforms.
+		     PackageAcceptanceTests (build.ps1) overrides this with linux-x64 so the
+		     ChurchBulletin.AcceptanceTests nupkg carries only the driver its Octopus
+		     step (platform/ci-dotnet, linux-x64) runs. -->
 		<PlaywrightPlatform>all</PlaywrightPlatform>
 	</PropertyGroup>
 
