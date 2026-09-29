@@ -187,7 +187,8 @@ function Get-CommitStatus([string] $Sha) {
 }
 
 function Write-CommitStatus([string] $Label, [string] $Sha) {
-    $statuses = Get-CommitStatus $Sha
+    # @() keeps a Count when the function output is empty (unrolled to $null under strict mode)
+    $statuses = @(Get-CommitStatus $Sha)
     if ($statuses.Count -eq 0) {
         Write-Host "  $Label $(Get-Short $Sha): no statuses"
         return
@@ -288,6 +289,18 @@ function Get-CarryingRelease([string] $Sha) {
     return @($carrying | Sort-Object { [DateTimeOffset]$_.Assembled })
 }
 
+# Pending interruptions of a task that need a human. Octopus's automatic Argo CD sync wait
+# (ArgoCDApplicationSync) is not a gate: the deployment resolves it itself, so it is ignored here.
+# Anything else (manual intervention, guided failure, unknown) is returned as text and is never answered.
+function Get-BlockingIntervention([string] $TaskId) {
+    $pending = @((Invoke-Octopus "interruptions?regarding=$TaskId&pendingOnly=true&take=20").Items)
+    $blocking = @($pending | Where-Object { $_.Type -ne 'ArgoCDApplicationSync' })
+    if ($blocking.Count -eq 0) {
+        return ''
+    }
+    return (($blocking | ForEach-Object { "$($_.Type) '$($_.Title)' ($($_.Id))" }) -join '; ')
+}
+
 # The newest deployment of any carrying release to one environment, with its task state; $null if none.
 function Get-DeploymentState([object[]] $Releases, [string] $EnvironmentName) {
     $state = Get-Octopus
@@ -302,10 +315,14 @@ function Get-DeploymentState([object[]] $Releases, [string] $EnvironmentName) {
         return $null
     }
     $task = Invoke-Octopus "tasks/$($deployment.TaskId)"
+    $intervention = ''
+    if ($task.HasPendingInterruptions) {
+        $intervention = Get-BlockingIntervention $task.Id
+    }
     $version = ($Releases | Where-Object { $_.Id -eq $deployment.ReleaseId } | Select-Object -First 1).Version
     return [pscustomobject]@{
         Environment = $EnvironmentName; Version = $version; Deployment = $deployment.Id; Task = $task.Id
-        State = $task.State; Waiting = [bool]$task.HasPendingInterruptions; Since = ($task.CompletedTime ?? $task.StartTime ?? $task.QueueTime)
+        State = $task.State; Waiting = [bool]$intervention; Intervention = $intervention; ArgoWait = ([bool]$task.HasPendingInterruptions -and -not $intervention); Since = ($task.CompletedTime ?? $task.StartTime ?? $task.QueueTime)
     }
 }
 
@@ -313,7 +330,7 @@ function Format-Deployment([string] $EnvironmentName, [object] $State) {
     if (-not $State) {
         return "  ${EnvironmentName}: not deployed"
     }
-    $waiting = if ($State.Waiting) { ' WAITING-ON-INTERVENTION' } else { '' }
+    $waiting = if ($State.Waiting) { " WAITING-ON-INTERVENTION [$($State.Intervention)] (answer it in Octopus; never from here)" } elseif ($State.ArgoWait) { ' (Argo CD sync wait, automatic)' } else { '' }
     return ('  {0}: {1}{2} release {3} {4} {5} ({6})' -f $EnvironmentName, $State.State, $waiting, $State.Version, $State.Deployment, $State.Task, (Format-Age $State.Since))
 }
 
