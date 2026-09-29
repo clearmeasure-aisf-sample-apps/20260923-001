@@ -1,262 +1,112 @@
 ---
 name: feature-loop-dispatch
 description: >
-  Authorize a batch of work items for full autonomous implementation in this repo
-  (ClearMeasureLabs/bootcamp-palermo-workorders). Resolves each item's epic/child tree,
-  computes a children-first execution order, and dispatches one dedicated sub-session
-  (subagent) per work item that runs the /feature-loop skill end-to-end — code, tests,
-  PR, API-verified green CI, merge, and board moves on
-  https://github.com/orgs/ClearMeasureLabs/projects/1 — with epic clamp rules enforced.
-  Use when asked to "dispatch the feature loop on ...", "implement these work items", or
-  when /feature-loop-dispatch is invoked with a list of issue numbers. The invoking
-  session stays alive as the orchestrator until every authorized item is Done.
+  Authorize a batch of work items for full autonomous implementation on the shared board
+  https://github.com/orgs/clearmeasure-aisf-sample-apps/projects/678 (bare `#N` = an issue
+  in clearmeasure-aisf-sample-apps/20260923-001; `owner/repo#N` for the other repo on the board). Resolves each
+  item's epic/child tree, computes a children-first execution order, and dispatches one
+  dedicated sub-session (subagent) per work item that runs the /feature-loop skill
+  end-to-end - code, tests, PR, API-verified Codefresh/Octopus/Argo CD evidence, merge,
+  board moves through the board workflow, and the closing move to Done - with parent
+  clamp rules enforced. Use when asked to "dispatch the feature loop on ...", "implement
+  these work items", or when /feature-loop-dispatch is invoked with a list of issue
+  numbers. The invoking session stays alive as the orchestrator until every authorized
+  item is Done or hard-blocked.
 ---
 
 # Feature-Loop Dispatch
 
-You are the **orchestrator**. The user has authorized the listed work items for full,
-unattended implementation. From this point the session runs to completion without asking
-anything further — every decision is made autonomously under the rules below.
+This session is the **orchestrator** of an authorized batch: it runs unattended to completion
+and never edits code. Per-item rules: `.claude/skills/feature-loop/SKILL.md` and
+`.claude/factory-loop.json` (read once; do not re-read). Rare detail (finding playbook,
+prompt rationale, resumption): `reference.md` next to this file. A user's own global rules may
+add to but never weaken these.
 
-The per-item rules are defined by this repo's `/feature-loop` skill
-(`.claude/skills/feature-loop/SKILL.md`) and `.claude/factory-loop.json`. Those two files
-are the contract; a user's own global rules may add to but never weaken them.
+**Cursor:** use `.cursor/skills/feature-loop-dispatch/SKILL.md` (tool mapping over this contract).
 
-**Cursor:** use `.cursor/skills/feature-loop-dispatch/SKILL.md` (Task / `resume` /
-stall heartbeat via AwaitShell) instead of this Claude Agent-oriented file when running
-in Cursor.
+`B='pwsh -NoProfile -File .claude/skills/feature-loop/board.ps1'`,
+`W='pwsh -NoProfile -File .claude/skills/feature-loop-dispatch/Check-StalledLanes.ps1'`.
 
-## Phase 0 — Start the stall watchdog (before any dispatch)
+**Input:** issue numbers (`N` for clearmeasure-aisf-sample-apps/20260923-001, `owner/repo#N` for the other repo). None
+given: ask once for the list; that is the only permitted question.
 
-Sub-sessions stall silently: they spawn a background CI poller and end their turn, and the
-poller's completion notification routes to whoever is listening (often the orchestrator,
-not the stopped lane) — so a PR can sit fully green and unmerged for hours. Detection must
-therefore be EXTERNAL and MECHANICAL, never dependent on the stalled agent itself:
+## Lane state: the single source of truth
 
-1. Run `pwsh -NoProfile .claude/skills/feature-loop-dispatch/Check-StalledLanes.ps1
-   -Repo ClearMeasureLabs/bootcamp-palermo-workorders` once now to baseline (read-only,
-   REST-only; exit 2 = stalls found).
-2. Run it as a HEARTBEAT, not an alarm: launch a background command that sleeps ~15
-   minutes, runs ONE check (pass `-TasksDir <session tasks dir>` so pre-PR local stalls
-   are caught via output-file staleness), and EXITS UNCONDITIONALLY — its exit wakes you
-   every cycle regardless of findings. RE-ARM IT AT THE END OF EVERY TURN in which it
-   fired. An alarm that only fires on detected trouble misses undetectable trouble (local
-   builds, harness runs, agents waiting on dead background tasks); a heartbeat guarantees
-   an orchestrator wake-up with fresh eyes each cycle. NEVER wait open-ended on lane
-   notifications alone.
-3. For every stall it reports, act immediately:
-   - `GREEN_UNMERGED` → SendMessage the owning lane: "PR #N is green; triage bots, merge,
-     move card, report." If the lane is unresumable, do the merge-side finish yourself
-     (verify check-runs, triage/reply bot findings, merge, card move) or spawn a fresh
-     closer subagent.
-   - `DIRTY` → order (or spawn) a conflict-resolution pass: merge master into the branch,
-     rebuild, re-push, re-verify.
-   - `CI_FAILED` / `CI_STUCK` → order a fix-and-repush or re-trigger.
-   - `MERGED_ISSUE_OPEN` → close the issue yourself with the merge-evidence comment
-     (verify sub_issues first; an issue clamped open behind open children is NOT a stall).
+`$B lane` keeps one record per work item in `<git common dir>/feature-loop/lanes.json`
+(outside the tree, shared by all worktrees). The orchestrator is its only writer. Update it on
+every transition, and on resumption read it first (`$B lane`) instead of re-deriving state.
 
-## Communication standard (applies to every update, issue comment, and PR description)
+```bash
+$B lane 123 status=queued parent=100 column=Todo
+$B lane 123 status=running agent=<agent-id> pr=145
+$B lane 123 column='Deployed to TDD' merge=<sha> release=2.5.750
+$B lane 123 status=done            # or status=blocked blocked='<reason>'
+$B lane                             # one line per item
+```
 
-Write like a software delivery leader briefing a stakeholder: Clarity first. Plain
-software-team vocabulary only — work item, defect, pull request, build, automated tests,
-test run, board status, dependency. Never invent orchestration jargon. Specifically:
+`status` is `queued | running | blocked | done`; other fields per `laneState` in
+`factory-loop.json`. After a resumption, verify only the `running` lanes with one
+`$B status <pr>` / `$B deploy <merge>` each.
 
-- Don't say "evidence PR" — say "a pull request that commits the test-run results
-  (logs/output) to the repository."
-- Don't say "clamp / clamped" — say "the parent work item stays open and its board status
-  moves back to match its least-finished open sub-item" (the rule itself is unchanged;
-  only the wording is).
-- Don't say "lane," "loop," "chain," or agent IDs in user-facing updates — say "the work
-  on item #N."
-- Don't say "blocks #N's passing evidence" — say "defect #X must be fixed before we can
-  re-run the tests and show item #N working."
-- Every status update states, in order: what happened, what it means for the work item,
-  and what happens next. A reader who has not followed the session must understand it
-  cold.
+## Phases
 
-## Inputs
+| Phase | Do | Done when |
+|---|---|---|
+| 0 Watchdog | `$W -Repo <owner/repo>` once per repo in the set (exit 0 none, 1 stalls, 2 usage). Then a background heartbeat: `sleep 900; $W -Repo ...` per repo (add `-TasksDir <tasks dir> -ActiveIds <ids>`), exiting unconditionally; re-arm it every turn it fired | armed for the whole session |
+| 1 Tree | `$B tree <item>` for each authorized item (descendants join the set; authorizing an epic authorizes its open descendants); write a lane per item; post the tree and order on each top-level item | every lane `queued` with `parent` |
+| 2 Dispatch | per item whose open descendants are all done: one background subagent, `subagent_type: "claude"`, `model: "sonnet"`, `isolation: "worktree"` (other repo: its own fresh clone); cap 3 running; prompt below | lane `running` with `agent` |
+| 3 Verify + clamp | on each report: verify with `$B status <pr>` and `$B deploy <merge>` (never the subagent's word); new children join as lanes and clamp their ancestors (`ancestor = min(intended, min(open child columns))`, `$B move`, a comment naming the child); promote an epic one column at a time, each by its own subagent, only after its last child is done | lane updated; next wave dispatched |
+| 4 Finish | continue until every lane is `done` or `blocked`; a failed sub-session gets a new subagent, a corrected prompt, or a child defect | all lanes final |
 
-The argument is a list of GitHub issue numbers (the "authorized set"). If no argument is
-given, ask once for the list before starting; that is the only permitted question.
+Watchdog findings and their actions: `reference.md` "Findings" (short form: `GREEN_UNMERGED`
+-> tell the owner to triage and merge, else a closer subagent; `DIRTY` -> merge the default
+branch in; `CI_*` -> fix and re-push; `RELEASE_*`/`DEPLOY_*` -> child defect or BLOCKED;
+`*_ISSUE_OPEN` -> finish the closeout; `LOCAL_STALL` -> SendMessage, take over after 20 min).
 
-Configuration comes from the repo's `.claude/factory-loop.json` (tracker, project, column
-map, private build command, merge method, cached board IDs).
+## Sub-session prompt (verbatim, fill in N and the repo)
 
-## Phase 1 — Resolve the tree (before any work)
+> Run the feature loop on work item #N in <owner/repo>, board
+> https://github.com/orgs/clearmeasure-aisf-sample-apps/projects/678. Follow
+> `.claude/skills/feature-loop/SKILL.md` exactly (per-column loop, gates, hard rules; open its
+> `reference.md` only for the section a situation needs). Use
+> `.claude/skills/feature-loop/board.ps1` for every card move, status check, deployment check
+> and wait. PRs say `Refs #N`, never a closing keyword. Close the issue only after its last
+> verification column is proven. Discovered work becomes a child sub-issue of #N.
+> ANTI-STALL: (1) spawn at most one hop of column subagents; they do work, never re-delegate.
+> (2) Once CI is green, triage and merge in the same turn; once prod (or Argo CD) is verified,
+> close in the same turn. (3) Wait with `board.ps1 wait ...` in the background; after every
+> resumption re-check state with one command. (4) A refused call (proxy, permission, HTTP
+> status) is reported exactly; card moves fall back to the `board-status:` comment. (5) An
+> unusable worktree is reported at once. (6) No progress for 20 minutes (CI 60, a deployment
+> 90): check state, then take over or report the blockage. (7) Never print or put on a
+> command line GITHUB_SAMPLE_APPS_PAT, GH_TOKEN, OCTOPUS or CODEFRESH.
+> REPORT at most 15 lines, starting `STATUS: COMPLETE` or `STATUS: BLOCKED`: final column, PR,
+> merge SHA, evidence (status contexts, release version, deployment/task IDs or Argo CD
+> state), card moves that fell back to a comment, children created.
 
-1. `gh api rate_limit --jq .resources` — record the budget. Board IDs (project ID, Status
-   field ID, Status option IDs) are pre-cached in `factory-loop.json` `boardIds` — use
-   them for every card move this session. Re-fetch via GraphQL
-   (`organization(login:"ClearMeasureLabs"){projectV2(number:1){...}}`) ONLY if a
-   mutation fails with an unknown-ID error, and update `factory-loop.json` when you do.
-   All other reads/writes use REST.
-2. For every authorized item, recursively resolve
-   `gh api repos/{o}/{r}/issues/{n}/sub_issues` to the deepest descendant. The full tree
-   of every authorized item joins the work set — authorizing an epic authorizes its open
-   descendants.
-3. Build the execution order:
-   - **Children first, depth-first.** A parent/epic enters the dispatch queue only after
-     ALL of its open descendants are Done.
-   - Open leaf items (no open children) are the initial dispatch wave.
-   - Independent items (no shared ancestor-ordering constraint between them) run in
-     parallel; explicitly ordered chains run sequentially.
-4. Post the resolved tree and planned order as a comment on each authorized top-level
-   item, and print it in the session before dispatching.
+## Session-end gate
 
-## Phase 2 — Dispatch one sub-session per work item
+Never end a turn (or send a user-facing final message) while any lane is `queued` or
+`running`, a PR of the set is open, a status or deployment is pending, or a sub-session's
+report is unverified. "Waiting on CI", "deploying", "monitoring", "will follow up" are
+forbidden final messages. Before the only final message, verify:
 
-For each work item whose turn has arrived, launch **one dedicated subagent** (its own
-session) via the Agent tool:
+- [ ] `$B lane`: every lane `done` (issue closed after its last verification column) or
+  `blocked` with the reason also on the issue
+- [ ] every PR merged, or why not documented
+- [ ] app items: `codefresh/ci` and `codefresh/release` success, tdd/uat/prod `Success`
+  (`$B deploy <merge>`); environment items: merged, gate summary, Argo CD for `gitops/`
+- [ ] `$W -Repo <repo>` for every repo in the set: no finding for the set
 
-- `subagent_type: "claude"` (general, full tools), `model: "sonnet"` — never Haiku.
-- `isolation: "worktree"` — every writing sub-session gets its own git worktree. No two
-  sub-sessions ever share a checkout.
-- Run in the background so independent items proceed concurrently. Cap concurrency at 3
-  writing sub-sessions to protect the GitHub API budget and local build resources.
+The final message begins with **`STATUS: COMPLETE`** or **`STATUS: BLOCKED`** (the exact
+blocker), then one short block per item: final column, PR, merge SHA, evidence, fallback card
+moves, children and their outcomes. Updates follow the communication rules of the feature-loop
+`reference.md` (what happened, what it means, what happens next; no orchestration jargon).
 
-The subagent's prompt must instruct it to **run the feature loop on exactly that one work
-item**, including verbatim:
+## Hard rules
 
-> Run the feature loop on work item #N in ClearMeasureLabs/bootcamp-palermo-workorders.
-> Follow this repo's `.claude/skills/feature-loop/SKILL.md` and
-> `.claude/factory-loop.json` exactly: work in your own worktree from origin/master; one
-> board column at a time via a fresh perspective per column (design → implement →
-> verify), never skipping columns, recording no-op justifications for non-applicable
-> columns; merge origin/master into the branch and re-run the private build
-> (`pwsh -NoProfile ./PrivateBuild.ps1`) before any push or PR; run
-> `pwsh -NoProfile ./AcceptanceTests.ps1` before opening the PR; triage every bot review
-> finding (fix or explicitly decline with a PR reply) before merge; a PR is complete only
-> when every check-run `conclusion` is `success` via
-> `gh api repos/{o}/{r}/commits/{sha}/check-runs` — never a shell exit code; follow the
-> Testing Policy (unit + integration + full-system Playwright in the same PR, or an
-> explicit stated reason a layer doesn't apply). Use REST for all reads/comments; use
-> only the cached board IDs from `.claude/factory-loop.json` for card moves. Any
-> discovered follow-up work becomes a CHILD sub-issue of #N (POST the child's numeric id
-> to `repos/{o}/{r}/issues/N/sub_issues`), placed in the leftmost column — report every
-> child you create in your final summary. When #N is merged and CI-verified green, move
-> its card to the `doneForNowColumn` from factory-loop.json and report: final board
-> column, PR number, merge commit SHA, and any children created.
-
-**Anti-stall requirements — add these to every sub-session prompt verbatim:**
-
-> ANTI-STALL RULES (mandatory): (1) NO DISPATCHER CHAINS — you may spawn subagents for
-> column work, but a subagent you spawn must DO work, never merely re-delegate to another
-> subagent; at most one delegation hop below you. (2) SYNCHRONOUS FINISH — once CI is
-> green, do the bot-finding triage, merge, issue close, and card move in the SAME turn;
-> never end your turn between "CI green" and "merged". (3) When waiting on CI, poll with
-> a bounded foreground loop or a background task you own, and after EVERY resumption
-> re-check the PR state directly with `gh` before assuming anything. (4) If any gh call
-> is blocked by a permission hook or classifier, do not stop silently — report the exact
-> blocked command and error in your final message so the orchestrator can act. (5) If
-> your worktree becomes unusable, report it immediately rather than improvising outside
-> it. (6) Every wait must have a deadline: if a subagent or CI run you're waiting on has
-> made no observable progress in 20 minutes, stop waiting, check state directly, and
-> either take over the work yourself or report the blockage.
-
-## Phase 3 — Epic clamp and promotion (orchestrator's job, after every completion)
-
-When a sub-session reports completion:
-
-1. Verify its claims independently: check-runs green on the merge commit, card in the
-   reported column. Never take a subagent's word for CI.
-2. **New children discovered** by the sub-session join the work set immediately, are
-   dispatched under the same rules, and clamp their parent (below).
-3. **Clamp every affected ancestor:** for each ancestor of the completed/changed item,
-   set `ancestor_status = min(intended_status, min(status of each open child))`. An
-   ancestor is never in a more senior (further right) column than its least-advanced open
-   child, is pulled BACK (and reopened if closed) when a child appears behind it, and
-   each clamp is recorded as a comment on the ancestor naming the child that caused it.
-4. **Promote epics only by clamp release:** when the last open child of an epic reaches
-   Done, advance the epic one column at a time — each column transition performed by its
-   own dedicated subagent per the column rules (a no-op justification pass is still a
-   pass) — until it too is Done. An epic never advances in the same action that closed
-   its child.
-5. Dispatch the next queued item(s) whose prerequisites are now met.
-
-## Phase 4 — Walk-away completion
-
-The orchestrator loop continues until every item in the (grown) work set is Done or hard-
-blocked. Do not stop because the session is long; use background subagents and wait for
-their notifications — but NEVER wait on notifications alone: keep the Phase 0 watchdog
-running on its ≤15-minute cadence for the whole session, because a completed grandchild's
-notification may route to you instead of its stopped parent lane, leaving that lane
-permanently asleep. When a notification arrives from a grandchild (an agent you did not
-spawn), relay its result to the owning lane via SendMessage yourself — do not assume the
-lane saw it. If a sub-session fails, read its output, fix the dispatch (new
-subagent, corrected prompt, or a filed child defect), and continue — a local build
-failure is diagnosed to root cause, never dismissed as environmental.
-
-**Phase 4 does not authorize ending the session.** Walk-away means the user does not need
-to answer questions — not that the orchestrator may stop while work is still pending.
-Session termination requires Phase 5 verification first.
-
-## Phase 5 — Completion heartbeat (mandatory — never hand off while pending)
-
-The orchestrator MUST NOT end a turn — and MUST NOT send a final user-facing message —
-while ANY of the following remain unresolved:
-
-- Any authorized work item not verified Done (issue closed, or explicitly hard-blocked with
-  reason recorded on the issue)
-- Any PR for the work set still open and unmerged
-- Any CI check-run with `status != "completed"`, or `conclusion` not in (`success`,
-  `skipped`)
-- Any dispatched sub-session whose outcome has not been independently verified
-- Any merge to master whose tip commit has not been API-verified green
-
-### Forbidden terminal messages
-
-Never end the session with status equivalent to:
-
-- "CI is still running" / "checks in progress" / "waiting on CI"
-- "In progress" / "monitoring" / "will follow up" / "polling started"
-- A partial summary that leaves verification unfinished
-
-If CI, merges, or sub-sessions are pending, **keep working** — poll, SendMessage, merge,
-or fix — until Phase 5 exit criteria are met or a hard block is documented.
-
-### CI polling heartbeat (60–90 seconds)
-
-Whenever CI is pending on a PR head SHA or a post-merge master tip SHA:
-
-1. Poll every **60–90 seconds** (foreground sleep loop or background task that exits when
-   done). Example:
-
-   ```
-   gh api repos/ClearMeasureLabs/bootcamp-palermo-workorders/commits/{sha}/check-runs \
-     --jq '[.check_runs[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped")) | {name, status, conclusion}]'
-   ```
-
-2. An empty `[]` result means CI is complete for that SHA. Non-empty means keep polling.
-3. After every merge, poll **`origin/master` tip SHA** until all check-runs are green.
-   Merge alone is not Done.
-4. On CI failure, act in the same session (fix, re-push, or spawn a closer subagent) — do
-   not report Done and leave red CI running.
-
-Phase 0's ~15-minute stall watchdog and Phase 5's ~75-second CI poll **both** run for the
-whole session. Phase 5 prevents the gap where a turn ends with "CI running" between
-watchdog cycles.
-
-### Session-end gate (independent verification)
-
-Before the ONLY permitted final message, verify ALL of:
-
-- [ ] Every work item: closed, or hard-blocked with documented reason
-- [ ] Every PR: merged (or documented why merge was impossible)
-- [ ] Every relevant merge commit / master tip: all check-runs `success` or `skipped` via
-  the check-runs API — never shell exit codes, never subagent claims
-- [ ] `Check-StalledLanes.ps1` baseline: no `GREEN_UNMERGED`, `CI_STUCK`, or `CI_FAILED`
-  for the work set
-
-The final message MUST begin with **`STATUS: COMPLETE`** or **`STATUS: BLOCKED`** (with
-the exact blocker). Then: per item — final column, PR, merge SHA, children created (and
-outcomes), plus any item left blocked and exactly why.
-
-## Hard rules (restated, non-negotiable)
-
-- One subagent = one work item's current column step; no subagent carries an item across
-  multiple columns, and the orchestrator itself never edits code.
-- Every writing subagent: Sonnet + own worktree.
-- A parent never outranks its least-advanced open child on the board.
-- CI is verified via the check-runs API only.
-- REST-first; cached board IDs from `factory-loop.json`; check `rate_limit` before each
-  dispatch wave.
+- One subagent = one work item's current column step; the orchestrator never edits code.
+- Every writing subagent: `model: "sonnet"` + its own worktree; at most 3 running.
+- A parent never outranks its least-advanced open child; closing is the terminal move.
+- CI is verified by commit statuses, deployments by the Octopus API, cards by `$B move`.
+- `GET /rate_limit` before each dispatch wave; GitHub MCP reads with `minimal_output: true`.
