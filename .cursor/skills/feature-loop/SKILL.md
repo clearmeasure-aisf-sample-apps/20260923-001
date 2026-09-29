@@ -14,7 +14,7 @@ description: >
 # Feature Loop (single work item) - Cursor
 
 **The contract is `.claude/skills/feature-loop/SKILL.md`.** Read it fully first, then
-`.claude/factory-loop.json`. Every rule there applies unchanged in Cursor: board 678 and its
+`.claude/factory-loop.json`; open its `reference.md` only for the section a situation needs. Every rule there applies unchanged in Cursor: board 678 and its
 columns, card moves through the environment repo's board workflow (`board-status`
 dispatch, fallback comment, GraphQL only locally with the project scope), closing as the
 terminal move (`Refs #N`, never a closing keyword; close only after Deployed to Prod for
@@ -54,12 +54,16 @@ worker per column (one delegation hop). Column workers never re-delegate.
 - **PRs:** Cloud Agents use the ManagePullRequest tool (`create_pr` / `update_pr`); local
   agents may use `gh pr create` / `gh pr edit`. The PR body references the item with
   `Refs #N`.
-- **GitHub reads and the board dispatch:** `gh api` locally; in cloud agents `curl` with
-  the token passed as a header through `--config -` on standard input (contract, "Moving
-  cards"). `gh` may be read-only in some Cloud Agent environments - on a refused write,
-  report the exact command and use the `board-status:` fallback comment for card moves.
-- **Waiting:** bounded polls with Shell / AwaitShell every 60-90 seconds; after every
-  resumption re-check the PR, commit status and deployment state directly.
+- **Board moves, status and deployment checks:** Shell with the contract's helper
+  `pwsh -NoProfile -File .claude/skills/feature-loop/board.ps1 move|status|deploy|wait|tree ...`
+  (it sends the `board-status` dispatch and posts the fallback comment on refusal). `gh` may
+  be read-only in some Cloud Agent environments - on a refused write, report the exact
+  command.
+- **Waiting:** `board.ps1 wait ...` in a background Shell, checked with AwaitShell at the
+  contract's intervals (CI and release every 4 minutes, deployments every 3); after every
+  resumption re-check with one `board.ps1 status` / `deploy` call.
+- **Token budget:** the contract's "Waiting and token budget" rules apply (minimal output,
+  no re-reads, grep/tail logs, Task reports of at most 15 lines).
 - **Bot triage:** follow the `bot-finding-triage` skill when available.
 - **Merge blocked:** leave a clear `GREEN_UNMERGED` state for the orchestrator or a human;
   never fake completion.

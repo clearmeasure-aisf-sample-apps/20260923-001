@@ -233,6 +233,8 @@ Columns: Todo (design) → In Progress (implement) → In Review (PR, `codefresh
   - **Cursor (tool mapping):** `.cursor/skills/feature-loop-dispatch/SKILL.md` (slash command: `.cursor/commands/feature-loop-dispatch.md`); uses Task `best-of-n-runner`, `model: inherit`, `resume`
 - Board, per-repo gates, CI/deployment signals and board-move transport: `.claude/factory-loop.json` (the same file, with `defaultRepo` set to its own repo, lives in the environment repo)
 - Card moves: the board workflow `.github/workflows/project-board.yml` lives in the environment repo and reacts only to that repo's own issue/PR events; every move of an item of this repo is a `board-status` `repository_dispatch` sent to the environment repo (cloud sessions cannot use GraphQL)
+- Board helper: `.claude/skills/feature-loop/board.ps1` (`move`, `status`, `deploy`, `wait`, `tree`, `lane`) — one command per card move, CI check, deployment check or bounded wait; the dispatch orchestrator's lane state lives in `<git common dir>/feature-loop/lanes.json`
+- Rarely needed detail (card-move transport, failure recovery, Octopus/Argo CD calls, clamp, watchdog findings): `reference.md` next to each skill's `SKILL.md`
 - Stall watchdog script: `.claude/skills/feature-loop-dispatch/Check-StalledLanes.ps1` (commit statuses + Octopus reads; exit 1 = stalls)
 
 ## Further Reference

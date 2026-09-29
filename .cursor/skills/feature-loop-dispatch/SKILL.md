@@ -28,6 +28,8 @@ check there applies unchanged. This file only maps them onto Cursor tools.
   pwsh -NoProfile -File .claude/skills/feature-loop-dispatch/Check-StalledLanes.ps1 -Repo <owner/repo>
   ```
 
+- Lane state: the contract's `board.ps1 lane` records are the single source of truth here
+  too; the orchestrator writes them and reads them first on resumption.
 - Heartbeat: a background Shell that sleeps ~15 minutes, runs one check per repo in the
   work set, and exits unconditionally; re-arm it every turn in which it fired. Prefer
   AwaitShell for bounded waits; never wait open-ended on Task notifications alone.
