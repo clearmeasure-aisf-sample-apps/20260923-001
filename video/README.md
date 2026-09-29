@@ -35,3 +35,18 @@ npm run render:instructions      # writes out/instructions-field.mp4
 Composition id: `InstructionsField`. 1920×1080, 30 fps. Scenes live in
 `src/instructionsFieldVideo.tsx`; narration text lives in
 `scripts/generate-instructions-narration.cjs`.
+
+## AI DevOps with Octopus Deploy pitch (#49)
+
+86-second narrated pitch: work item #40 from the board through Codefresh CI, Octopus release 2.5.753, the
+platform-continuous lifecycle (tdd → uat → prod via Argo CD) and API-verified evidence to Done.
+
+```
+npm install
+npm run narration:pitch   # TTS into public/audio/pitch-*.mp3
+npm run render:pitch      # writes out/ai-devops-octopus-pitch.mp4
+```
+
+Composition id: `AiDevopsOctopusPitch`. 1920×1080, 30 fps. Scenes live in `src/aiDevopsOctopusPitch.tsx`;
+narration and captions share `src/aiDevopsOctopusPitch.narration.json`; storyboard in
+`scripts/ai-devops-octopus-pitch.md`.
