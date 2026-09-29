@@ -79,6 +79,14 @@
                     <label for="Instructions" class="form-label">Instructions:</label>
                     <div>
                         <InputTextArea data-testid="@Elements.Instructions" id="Instructions" @bind-Value="Model.Instructions" class="form-control input-textarea" maxlength="@WorkOrder.InstructionsMaxLength" disabled="@Model.IsReadOnly"/>
+                        @if (!Model.IsReadOnly)
+                        {
+                            var instructionsRemaining = WorkOrder.InstructionsMaxLength - (Model.Instructions?.Length ?? 0);
+                            <small data-testid="@Elements.InstructionsCharCount"
+                                   class="@(instructionsRemaining == 0 ? "text-danger" : "text-muted")">
+                                @instructionsRemaining characters remaining
+                            </small>
+                        }
                     </div>
                 </div>
 
@@ -192,6 +200,7 @@
         RoomNumber,
         Description,
         Instructions,
+        InstructionsCharCount,
         AssignedDate,
         CompletedDate,
         CreatedDate,
