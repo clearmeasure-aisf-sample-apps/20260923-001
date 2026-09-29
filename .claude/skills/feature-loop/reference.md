@@ -72,6 +72,12 @@ oct "deployments?projects=<projectId>&environments=<envId>&take=10"
 oct "tasks/<TaskId>"                              # State, HasPendingInterruptions
 ```
 
+A task with `HasPendingInterruptions` is not automatically a human gate. `board.ps1` reads
+`interruptions?regarding=<TaskId>&pendingOnly=true`: type `ArgoCDApplicationSync` is Octopus's
+automatic Argo CD sync wait, so `wait deploy` keeps polling and fails only on Failed / Canceled /
+TimedOut. Any other type (manual intervention, guided failure) stops the wait with
+`WAITING-ON-INTERVENTION [<type> '<title>' (<id>)]`; it is reported and never answered.
+
 The carrying release is the one whose `app-commit` equals the merge SHA, or else the oldest
 later release whose `app-commit` contains it (`GET /repos/{o}/{r}/compare/{merge}...{app_commit}`
 -> `ahead` or `identical`). Name its version in every evidence comment.
@@ -115,6 +121,21 @@ Verified and closing (board: Done).
   (environment repo instead: gate summary; Argo CD <app> Synced/Healthy)
 - children: #<c> (closed) | none
 ```
+
+### Prod screenshot (optional visual evidence)
+
+`node .claude/skills/feature-loop/prod-screenshot.js <baseUrl> <out.png> --testid <data-testid>`
+signs in on `/login` (first user in the dropdown), waits for the element, prints its text and
+saves a screenshot with the element in view. `<baseUrl>` is `https://workorders-<env>.<apps domain>`,
+read from the Octopus task log (`tasks/<TaskId>/raw`), never hard-coded. Requires Node and
+Playwright (local, global or under `/opt/node*`; `PLAYWRIGHT_MODULE_PATH` overrides) and a Chromium
+(`PLAYWRIGHT_CHROMIUM_EXECUTABLE`, else `$PLAYWRIGHT_BROWSERS_PATH/chromium`).
+
+TLS verification is never disabled. The helper computes the SPKI sha256 of the agent-proxy CA
+certificates (CCR agent-proxy interception CA, CCR Upstream Proxy CA, sandbox-egress Egress
+Gateway CA, TLS Inspection CA) from the bundle named by `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`,
+`REQUESTS_CA_BUNDLE` or `CURL_CA_BUNDLE`, and passes only those keys to Chromium as
+`--ignore-certificate-errors-spki-list`. Cite the printed element text in the evidence comment.
 
 Closing as not planned or duplicate also lands in Done: only for a genuinely abandoned item,
 said so in the comment. A merged PR moves the PR card, not a `Refs` issue.

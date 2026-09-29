@@ -196,8 +196,22 @@ $crapArgs = @(
 )
 
 Write-AuditHost "Analyzing CRAP scores ..."
-Invoke-QuietExternal { & dotnet-crap @crapArgs }
-$crapExit = $LASTEXITCODE
+# dotnet-crap targets .NET 8; a container with only the .NET 10 runtime needs roll-forward.
+# Scoped to this one invocation: the previous value is restored afterwards.
+$previousRollForward = $env:DOTNET_ROLL_FORWARD
+$env:DOTNET_ROLL_FORWARD = "Major"
+try {
+    Invoke-QuietExternal { & dotnet-crap @crapArgs }
+    $crapExit = $LASTEXITCODE
+}
+finally {
+    if ($null -eq $previousRollForward) {
+        Remove-Item Env:DOTNET_ROLL_FORWARD -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:DOTNET_ROLL_FORWARD = $previousRollForward
+    }
+}
 # dotnet-crap exits non-zero when CRAPpy methods exist — that is expected.
 
 if (-not (Test-Path $reportJson)) {
