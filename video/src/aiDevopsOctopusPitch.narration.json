@@ -1,0 +1,54 @@
+[
+  {
+    "id": "hook",
+    "seconds": 8,
+    "caption": "A work item goes in. Production software comes out. No hand-offs.",
+    "spoken": "A work item goes in. Production software comes out. No hand-offs."
+  },
+  {
+    "id": "work-item",
+    "seconds": 10,
+    "caption": "Take issue #40: a remaining-character counter on the Instructions field. An AI agent posts the design comment and moves the card.",
+    "spoken": "Take issue forty: a remaining-character counter on the Instructions field. An AI agent posts the design comment and moves the card."
+  },
+  {
+    "id": "build",
+    "seconds": 12,
+    "caption": "The agent writes the code with bUnit and Playwright tests, runs the private build and the acceptance suite, then opens a pull request marked Refs #40.",
+    "spoken": "The agent writes the code with bUnit and Playwright tests, runs the private build and the acceptance suite, then opens a pull request marked refs forty."
+  },
+  {
+    "id": "ci-gate",
+    "seconds": 10,
+    "caption": "Codefresh CI runs on the pull request head. The branch is protected: pull request required, required check, no bypass. Green means merge.",
+    "spoken": "Codefresh C I runs on the pull request head. The branch is protected: pull request required, required check, no bypass. Green means merge.",
+    "rate": "+16%"
+  },
+  {
+    "id": "release",
+    "seconds": 12,
+    "caption": "The merge triggers the Codefresh release pipeline. It creates Octopus release 2.5.753, with build information and the CI summary in the release notes.",
+    "spoken": "The merge triggers the Codefresh release pipeline. It creates Octopus release two point five point seven fifty-three, with build information and the C I summary in the release notes."
+  },
+  {
+    "id": "delivery",
+    "seconds": 14,
+    "caption": "The Octopus lifecycle deploys to TDD, then UAT, then production, automatically. Each step updates Argo CD image tags in Git and waits for the sync. TDD also runs smoke and acceptance tests.",
+    "spoken": "The Octopus lifecycle deploys to T D D, then U A T, then production, automatically. Each step updates Argo C D image tags in Git and waits for the sync. T D D also runs smoke and acceptance tests.",
+    "rate": "+18%"
+  },
+  {
+    "id": "evidence",
+    "seconds": 12,
+    "caption": "The agent verifies every environment through the Octopus API, captures a production screenshot, posts the evidence and closes the issue. Evidence comes from the APIs, not from the agent's word.",
+    "spoken": "The agent verifies every environment through the Octopus API, captures a production screenshot, posts the evidence and closes the issue. Evidence comes from the APIs, not from the agent's word.",
+    "rate": "+16%"
+  },
+  {
+    "id": "scale",
+    "seconds": 8,
+    "caption": "Three work items, in parallel, the same afternoon: releases 2.5.753, 2.5.754 and 2.5.755, all in production.",
+    "spoken": "Three work items, in parallel, the same afternoon. Releases seven fifty-three, fifty-four and fifty-five, all in production.",
+    "rate": "+24%"
+  }
+]
