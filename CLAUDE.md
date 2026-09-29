@@ -221,16 +221,19 @@ The remaining baselined findings (`InconsistentNaming` ×4, `MemberCanBePrivate.
 
 ## Feature Loop
 
-Work items live on the ClearMeasureLabs project board: https://github.com/orgs/ClearMeasureLabs/projects/1
+Work items live on the shared project board (org `clearmeasure-aisf-sample-apps`, project 678): https://github.com/orgs/clearmeasure-aisf-sample-apps/projects/678 — one board for this repo and the environment repo `clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh`.
 
-- `/feature-loop N` — drive ONE work item across the board end-to-end (design → implement → verify, one column at a time, CI-verified merge).
-  - **Cursor:** `.cursor/skills/feature-loop/SKILL.md` (slash command: `.cursor/commands/feature-loop.md`)
-  - **Claude Code:** `.claude/skills/feature-loop/SKILL.md`
-- `/feature-loop-dispatch N1 N2 ...` — orchestrate a batch: children-first tree resolution, one sub-session per item, epic clamp, stall watchdog.
-  - **Cursor:** `.cursor/skills/feature-loop-dispatch/SKILL.md` (slash command: `.cursor/commands/feature-loop-dispatch.md`); uses Task `best-of-n-runner`, `model: inherit` (Auto, cost-optimized), `resume`
-  - **Claude Code:** `.claude/skills/feature-loop-dispatch/SKILL.md`
-- Board/build configuration (columns, cached board IDs, gates): `.claude/factory-loop.json` (shared)
-- Stall watchdog script (shared): `.claude/skills/feature-loop-dispatch/Check-StalledLanes.ps1`
+Columns: Todo (design) → In Progress (implement) → In Review (PR, `codefresh/ci` green, merge) → Deployed to TDD → Deployed to UAT → Deployed to Prod (Octopus deployments of project `workorders`) → Done. Closing an issue is the move to Done, so PRs use `Refs #N` (never `Closes #N`) and the issue is closed only after Deployed to Prod is verified.
+
+- `/feature-loop N` — drive ONE work item across the board end-to-end, one column at a time.
+  - **Claude Code (contract):** `.claude/skills/feature-loop/SKILL.md`
+  - **Cursor (tool mapping over the contract):** `.cursor/skills/feature-loop/SKILL.md` (slash command: `.cursor/commands/feature-loop.md`)
+- `/feature-loop-dispatch N1 N2 ...` — orchestrate a batch: children-first tree resolution, one sub-session per item, parent clamp, stall watchdog.
+  - **Claude Code (contract):** `.claude/skills/feature-loop-dispatch/SKILL.md`
+  - **Cursor (tool mapping):** `.cursor/skills/feature-loop-dispatch/SKILL.md` (slash command: `.cursor/commands/feature-loop-dispatch.md`); uses Task `best-of-n-runner`, `model: inherit`, `resume`
+- Board, per-repo gates, CI/deployment signals and board-move transport: `.claude/factory-loop.json` (the same file, with `defaultRepo` set to its own repo, lives in the environment repo)
+- Card moves: the board workflow `.github/workflows/project-board.yml` lives in the environment repo and reacts only to that repo's own issue/PR events; every move of an item of this repo is a `board-status` `repository_dispatch` sent to the environment repo (cloud sessions cannot use GraphQL)
+- Stall watchdog script: `.claude/skills/feature-loop-dispatch/Check-StalledLanes.ps1` (commit statuses + Octopus reads; exit 1 = stalls)
 
 ## Further Reference
 
