@@ -611,6 +611,27 @@ public class WorkOrderSearchTests : AcceptanceTestBase
     }
 
     [Test, Retry(2)]
+    public async Task ShouldUseSingularWorkOrderInResultsHeader_WhenSearchReturnsOneWorkOrder()
+    {
+        var creator = Faker<Employee>();
+        var order = Faker<WorkOrder>();
+        order.Creator = creator;
+
+        await using var context = TestHost.NewDbContext();
+        context.Add(creator);
+        context.Add(order);
+        await context.SaveChangesAsync();
+
+        await Click(nameof(NavMenu.Elements.Search));
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Page.Locator($"#{WorkOrderSearch.Elements.CreatorSelect}").SelectOptionAsync(creator.UserName);
+        await Page.Locator($"#{WorkOrderSearch.Elements.SearchButton}").ClickAsync();
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        await Expect(Page.Locator($"#{WorkOrderSearch.Elements.ResultsHeader}")).ToContainTextAsync("Search Results (1 work order)");
+    }
+
+    [Test, Retry(2)]
     public async Task AssignedToMe_WhenChecked_ShowsOnlyCurrentUsersWorkOrders()
     {
         // Arrange: create two employees each with a distinct assigned work order
