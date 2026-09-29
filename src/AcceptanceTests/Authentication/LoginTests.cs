@@ -450,11 +450,12 @@ public class LoginTests : AcceptanceTestBase
     /// <summary>
     /// Regression (#9086): Lovejoy shortcut must await the in-flight EmployeeGetAllQuery
     /// so an early click still authenticates as tlovejoy once employees load.
+    /// The employees request is held by a gate until after the click, so the race is deterministic.
     /// </summary>
-    [Test, Retry(2)]
+    [Test]
     public async Task Should_LoginAsTlovejoy_WhenLovejoyClickedBeforeEmployeesLoaded()
     {
-        const int employeeQueryDelayMs = 1_000;
+        var releaseEmployees = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await Page.RouteAsync("**/*blazor-wasm-single-api*", async route =>
         {
@@ -467,29 +468,39 @@ public class LoginTests : AcceptanceTestBase
             var postData = route.Request.PostData ?? string.Empty;
             if (postData.Contains("EmployeeGetAllQuery", StringComparison.Ordinal))
             {
-                await Task.Delay(employeeQueryDelayMs);
+                await releaseEmployees.Task;
             }
 
             await route.ContinueAsync();
         });
 
-        await Page.GotoAsync("/login");
-        var shortcut = Page.GetByTestId(nameof(Login.Elements.LovejoyShortcut));
-        await shortcut.WaitForAsync(new LocatorWaitForOptions
+        try
         {
-            State = WaitForSelectorState.Visible,
-            Timeout = 90_000
-        });
+            await Page.GotoAsync("/login");
+            var shortcut = Page.GetByTestId(nameof(Login.Elements.LovejoyShortcut));
+            await shortcut.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 90_000
+            });
 
-        var employeeOptions = Page.GetByTestId(nameof(Login.Elements.User))
-            .Locator("option[value]:not([value=''])");
-        await Expect(employeeOptions).ToHaveCountAsync(0);
+            var employeeOptions = Page.GetByTestId(nameof(Login.Elements.User))
+                .Locator("option[value]:not([value=''])");
+            await Expect(employeeOptions).ToHaveCountAsync(0);
 
-        await Click(nameof(Login.Elements.LovejoyShortcut));
+            await Click(nameof(Login.Elements.LovejoyShortcut));
+            await Expect(employeeOptions).ToHaveCountAsync(0);
 
-        var welcomeTextLocator = Page.GetByTestId(nameof(Logout.Elements.WelcomeText));
-        await Expect(welcomeTextLocator).ToHaveTextAsync(
-            "Welcome tlovejoy!",
-            new LocatorAssertionsToHaveTextOptions { Timeout = 60_000 });
+            releaseEmployees.SetResult();
+
+            var welcomeTextLocator = Page.GetByTestId(nameof(Logout.Elements.WelcomeText));
+            await Expect(welcomeTextLocator).ToHaveTextAsync(
+                "Welcome tlovejoy!",
+                new LocatorAssertionsToHaveTextOptions { Timeout = 60_000 });
+        }
+        finally
+        {
+            releaseEmployees.TrySetResult();
+        }
     }
 }
