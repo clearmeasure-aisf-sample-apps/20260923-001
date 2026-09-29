@@ -1,149 +1,130 @@
 ---
 name: feature-loop
 description: >
-  Run the feature loop on ONE GitHub work item in this repo: drive it across the
-  ClearMeasureLabs project board (https://github.com/orgs/ClearMeasureLabs/projects/1)
-  one column at a time — design, implement, verify — through code, tests, a conflict-free
-  PR, API-verified green CI, bot-finding triage, merge, and board moves. Use when asked to
-  "run the feature loop on work item #N", "work issue #N through the board", or when
-  /feature-loop N is invoked. For a batch of items, use /feature-loop-dispatch instead.
+  Run the feature loop on ONE GitHub work item: drive it across the shared project board
+  https://github.com/orgs/clearmeasure-aisf-sample-apps/projects/678 one column at a time
+  (Todo = design, In Progress = implement, In Review = verify, Deployed to TDD/UAT/Prod =
+  post-merge verification for the app repo, Done = terminal) through code, tests, a
+  conflict-free PR, API-verified Codefresh/Octopus/Argo CD evidence, bot-finding triage,
+  merge, and board moves. Bare `#N` means an issue in clearmeasure-aisf-sample-apps/20260923-001; `owner/repo#N`
+  targets the other repo on the board. Use when asked to "run the feature loop on work
+  item #N", "work issue #N through the board", or when /feature-loop N is invoked. For a
+  batch of items, use /feature-loop-dispatch instead.
 ---
 
 # Feature Loop (single work item)
 
-Drives exactly one work item end-to-end. Configuration (board, columns, build commands,
-merge policy, cached board IDs) comes from `.claude/factory-loop.json` at the repo root.
-These rules are the contract for this repository; a user's own global rules may add to but
-never weaken them.
+Drives exactly one work item end-to-end. Settings: `.claude/factory-loop.json`. Rare detail
+(card-move transport, failure recovery, Octopus/Argo CD calls, clamp, evidence template):
+`reference.md` next to this file - read only the section a situation needs. These rules are
+the contract; a user's own global rules may add to but never weaken them.
 
-**Cursor:** use `.cursor/skills/feature-loop/SKILL.md` (Task tool / `best-of-n-runner`)
-instead of this Claude Agent-oriented file when running in Cursor.
+| Repo | Kind | Default branch | Column path |
+|---|---|---|---|
+| `clearmeasure-aisf-sample-apps/20260923-001` | app (`workorders`) | `master` | Todo, In Progress, In Review, Deployed to TDD, Deployed to UAT, Deployed to Prod, Done |
+| `clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh` | environment (`platform`) | `main` | Todo, In Progress, In Review, Done |
 
-## Children first, depth-first (before touching the item)
+`#N` is an issue in `defaultRepo` (clearmeasure-aisf-sample-apps/20260923-001); `owner/repo#N` names the repo (a key of
+`repos`). Work on the other repo happens in a fresh clone, under that repo's own `CLAUDE.md`.
 
-Resolve `gh api repos/{owner}/{repo}/issues/{N}/sub_issues` BEFORE touching #N. Recurse to
-the deepest open descendant and work the tree bottom-up: a child is driven to Done, then
-its parent is reconsidered. A parent is never started while any of its descendants are
-open. Independent siblings may be worked in parallel — each in its own worktree. Report
-the resolved tree and execution order before starting.
+**Cursor:** use `.cursor/skills/feature-loop/SKILL.md` (tool mapping over this contract).
 
-## Column progression
+## The helper (instead of hand-built curl/JSON)
 
-- **One column at a time.** The item advances exactly one board column per transition —
-  never skips — and only after that column's work is verified. Columns and their roles
-  (design / implement / verify / terminal) are in `factory-loop.json`.
-- **Independent subagent per column.** Each column's work is done by its own dedicated
-  subagent; one column's deliverable is the next column's input. No single subagent
-  carries the item through multiple columns.
-- Non-applicable columns are passed through with a recorded no-op justification (an issue
-  comment stating why the column does not apply).
-- On completion of the loop's scope, leave the card in `doneForNowColumn` from
-  `factory-loop.json` unless the item is genuinely Done.
+`B='pwsh -NoProfile -File .claude/skills/feature-loop/board.ps1'`. `<item>` is `N` or
+`owner/repo#N` (never a bare `#N` in bash: `#` starts a comment). Tokens come from
+`GITHUB_SAMPLE_APPS_PAT`, `GH_TOKEN` or `GITHUB_TOKEN` (Octopus: `OCTOPUS`); never printed.
 
-## Subagent rules
+| Command | Does | Exit |
+|---|---|---|
+| `$B move <item> '<Column>'` | `board-status` dispatch to the environment repo; any answer but `204` posts the fallback `board-status:` comment | 0 moved, 1 refused (fallback posted) |
+| `$B status <pr\|sha>` | PR state, head, mergeable state, commit statuses of the head (and the merge commit) | 0 |
+| `$B deploy <merge-sha>` | the carrying Octopus release and its tdd/uat/prod task states | 0, 1 no release yet, 3 no key |
+| `$B wait ci <pr>` / `wait release <pr>` / `wait deploy <sha> <env>` | polls at the configured interval, prints only changes | 0 success, 1 failure, 4 timeout |
+| `$B tree <item>` | sub-issue tree (both repos) and the children-first order | 0 |
 
-- **One git worktree per writing subagent.** Any subagent that edits files, builds, or
-  runs tests gets its own git worktree (`isolation: "worktree"`). Parallel subagents never
-  share a checkout. Read-only search agents may use the main checkout.
-- **All subagents run on Sonnet** (`model: "sonnet"`) — no stage is downgraded to Haiku.
+Exit 2 is a usage error. Run `wait` with `run_in_background: true`; its exit wakes the session.
 
-## Build, PR, and merge gates
+## Per-column loop
 
-- Branch naming: `{username}/{branch-description}` (the account that initiated the session).
-- **Private build before commit:** `pwsh -NoProfile ./PrivateBuild.ps1` must pass.
-- **Acceptance tests before PR:** `pwsh -NoProfile ./AcceptanceTests.ps1`.
-- **Merge master before PR (mandatory):** before pushing or opening/updating a PR, fetch
-  and merge `origin/master` into the branch, resolve conflicts, and re-run the private
-  build. PRs must arrive conflict-free against current master.
-- **CI is API-verified only:** after pushing, poll
-  `gh api repos/{owner}/{repo}/commits/{sha}/check-runs` and confirm EVERY job's
-  `conclusion` is `success`. Never report a PR complete on "PR created" or a local build,
-  and never infer status from a shell exit code. Fix and re-push until green.
-- **Triage every bot review finding before merge:** list all review comments from
-  static-analysis bots (`github-code-quality[bot]`, `github-advanced-security[bot]`,
-  etc.). Every finding is either fixed in the same PR or explicitly declined with a
-  one-line reply on the PR. Never merge past bot findings silently.
-- Merge method and issue-close policy come from `factory-loop.json`.
+Each row is done by its own fresh subagent (one delegation hop; it never re-delegates). The
+item advances exactly one column of its `columnPath`, only after the "verify" fact holds. A
+column that does not apply still gets a one-line issue comment saying why (a docs-only app
+change still ships through a release, so the deployment columns apply).
 
-## Testing policy (definition of done, non-negotiable)
+| Column | Work | Verify by fact (one command) | Then |
+|---|---|---|---|
+| (start) | `$B tree <item>`; finish every open descendant first | the printed order has no open child of #N | app: `$B move <item> Todo` |
+| Todo | one design comment: problem, approach, acceptance criteria, test plan per layer, risks; app: Onion layers; env: paths, `checksByPath` checks, TB rules at stake, `gitops/` yes/no | the comment exists | `$B move <item> 'In Progress'` |
+| In Progress | branch `{username}/{branch-description}` from the default branch; code + tests; gates (below); merge the default branch in; push; PR body `Refs #N` | `$B status <pr>`: open, `mergeable=clean` | `$B move <item> 'In Review'` (app: the PR too) |
+| In Review | CI; triage every bot finding (fix, or decline with a one-line PR reply); merge with `mergeMethod` | app: `$B wait ci <pr>` exit 0, then merged. env: gate summary in the PR body, merged | app: `$B wait release <pr>` exit 0. env: Argo CD check if `gitops/` changed (reference.md), then close |
+| Deployed to TDD | - | `$B wait deploy <merge-sha> tdd` exit 0 | `$B move <item> 'Deployed to TDD'` |
+| Deployed to UAT | - | `$B wait deploy <merge-sha> uat` exit 0 | `$B move <item> 'Deployed to UAT'` |
+| Deployed to Prod | - | `$B wait deploy <merge-sha> prod` exit 0 | `$B move <item> 'Deployed to Prod'`; close with the evidence comment; app: `$B move <item> Done` |
+| Done | terminal | issue closed | final message |
 
-No functionality is added or changed without automated tests **in the same PR** at every
-applicable layer:
+Environment-repo items move automatically to Todo on open, to In Review only for issues a PR
+*closes* (not `Refs`), and to Done on close: dispatch only the moves those events miss (In
+Progress, In Review of the issue, parent moves). App-repo items: every move is a dispatch.
+Record each move as `board-status: <column> (via dispatch | fallback)`, folded into the
+column's comment when one is posted anyway. A refused move never stops the loop.
 
-1. **Unit tests** (`src/UnitTests` — NUnit 4.x + Shouldly, bUnit for components, AutoBogus
-   for data; test doubles prefixed `Stub`).
-2. **Integration tests** (`src/IntegrationTests`) wherever the change crosses a module
-   boundary (data store, MediatR handlers, HTTP endpoints, cross-project calls).
-3. **Full-system tests** (`src/AcceptanceTests` — Playwright, driving the real UI with
-   third-party interfaces stubbed).
+## Hard rules
 
-If a layer genuinely does not apply, state explicitly in the PR description why. UI
-features MUST have a Playwright test that actually drives that UI. Respect the Onion
-Architecture dependency rules (see repo `CLAUDE.md`) — violations are auto-rejected.
+- **Closing is the terminal move.** Never close, and never write `Closes/Fixes/Resolves #N` in
+  a PR or commit, before the last verification column is proven (app: Deployed to Prod; env:
+  merged, plus Argo CD Synced/Healthy for `gitops/`). The loop closes the issue itself, last,
+  with the evidence comment.
+- **Children first, depth-first.** A parent is never started while a descendant is open.
+  Discovered work (follow-up, defect, deferred bot finding) becomes a child sub-issue of #N,
+  never a sibling (reference.md "Children").
+- **Parent clamp:** a parent's column is never right of its least-advanced open child; a child
+  filed from a late column pulls the parent back (reference.md "Parent clamp").
+- **Evidence is API facts only:** commit statuses, Octopus task states, Argo CD state. Never
+  "PR created", a local build, or a shell exit code.
+- **One git worktree per writing subagent** (`isolation: "worktree"`); every subagent runs on
+  `model: "sonnet"` (`subagents` in `factory-loop.json`).
+- **Secrets** (`GITHUB_SAMPLE_APPS_PAT`, `GH_TOKEN`, `OCTOPUS`, `CODEFRESH`) are never echoed,
+  logged, written to repo files, or put on a command line. GraphQL, org endpoints and the
+  Actions API are refused in cloud sessions: never retry them.
+- Never answer an Octopus manual intervention, override a freeze, or start a runbook.
 
-## Discovered work becomes a child
+## Gates
 
-When working #N spawns new work — a follow-up from testing, a defect found while
-implementing, a deferred bot finding — create it as a **child sub-issue** of #N, never a
-free-floating sibling, and place it in the leftmost board column:
+**App (`clearmeasure-aisf-sample-apps/20260923-001`)** - plus the rules of its `CLAUDE.md` (Onion, no new NuGet, no `.octopus/`/build/pipeline edits, NUnit 4 + Shouldly, `Stub` doubles, test naming):
+1. `pwsh -NoProfile ./PrivateBuild.ps1` passes before every commit.
+2. Merge `origin/master`, resolve conflicts, re-run the private build.
+3. `ACCEPTANCE_SKIP_CLEAN=true pwsh -NoProfile ./AcceptanceTests.ps1` before the PR (right after a passing private build).
+4. Tests in the same PR at every applicable layer: unit (bUnit, AutoBogus), integration where a module boundary is crossed, Playwright acceptance for every UI change. A layer that does not apply is explained in the PR body.
 
-```
-child_id=$(gh api repos/{owner}/{repo}/issues/{child} --jq .id)
-gh api repos/{owner}/{repo}/issues/{N}/sub_issues -X POST -F sub_issue_id=$child_id
-gh api repos/{owner}/{repo}/issues/{N}/sub_issues   # verify
-```
+**Environment (`clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh`)** - plus its `CLAUDE.md`, `docs/tool-boundaries.md` (TB01-TB24) and `docs/scripting.md`:
+1. `dotnet test tests/Platform.Conformance.Offline` - only the known C09 failure.
+2. `pwsh -NoProfile -File scripts/checks/validate-all.ps1 <checks>` - `always` plus `checksByPath`; a missing tool is a reported `SKIP`.
+3. Merge `origin/main`, re-run both, push; always a PR, never a direct push. No PR CI: the PR body carries the gate summary. A branch-protection refusal is `STATUS: BLOCKED` with the exact message.
 
-Note: the POST takes the child's numeric `id`, NOT its issue number.
+## Waiting and token budget
 
-## Parent clamp
+| Wait | Typical | Poll every | Deadline |
+|---|---|---|---|
+| `codefresh/ci` on the PR head | 10-20 min | 4 min | 60 min |
+| `codefresh/release` on the merge commit | 10-15 min | 4 min | 60 min |
+| Octopus deployment, per environment | 2-15 min | 3 min | 90 min |
+| Argo CD sync after the merge | 3-5 min | 3 min | 20 min |
 
-A parent's board status may never be further right than the LEAST-advanced of its open
-children. Before every parent card move, list the parent's sub-issues and clamp:
-`parent_status = min(intended_status, min(status of each open child))`. A parent cannot
-reach Done while any child is open; filing a follow-up child from a late column pulls the
-parent BACK to the child's column (reopening it if closed). Record each clamp as a comment
-on the parent naming the child that caused it. The parent advances again only as its
-children advance.
+- Wait with `$B wait ...` in the background, never a per-minute hand loop; after every
+  resumption re-check with one `$B status` / `$B deploy` before acting.
+- No observable progress for 20 minutes, or a deadline passed: check state once, then act or
+  report `STATUS: BLOCKED` (recovery: reference.md "Failures").
+- GitHub MCP tools: `minimal_output: true` and `perPage` 5-10 unless a full body is needed.
+- Never re-read a file already read in this session; read only the lines needed.
+- Build and test logs: `grep -E 'error|FAIL|Passed!|Failed!' <log> | tail -40`, never a full dump.
+- Subagents return at most 15 lines: outcome, PR/SHA, evidence, children, blockers.
 
-## GitHub API budget
+## Completion
 
-The GraphQL budget is shared across all agents. Use REST (`gh issue`, `gh pr`,
-`gh api repos/...`) for reads and comments. Reserve GraphQL for board field mutations,
-using the pre-cached IDs in `factory-loop.json` `boardIds` — re-fetch them only if a
-mutation fails with an unknown-ID error. Check `gh api rate_limit` before any fan-out.
-
-Card moves use:
-
-```
-gh api graphql -f query='mutation{updateProjectV2ItemFieldValue(input:{projectId:"<projectId>",itemId:"<itemId>",fieldId:"<statusFieldId>",value:{singleSelectOptionId:"<optionId>"}}){projectV2Item{id}}}'
-```
-
-(Find `itemId` for an issue via the org project: it is the ProjectV2 item ID, not the
-issue node ID.)
-
-## Completion heartbeat (mandatory — never hand off while pending)
-
-The agent driving #N MUST NOT end a turn or send a final message while CI, merge, issue
-close, or card move is still pending.
-
-When CI is running, poll every **60–90 seconds** until every check-run on the PR head (and,
-after merge, on `origin/master` tip) has `conclusion` `success` or `skipped`:
-
-```
-gh api repos/{owner}/{repo}/commits/{sha}/check-runs \
-  --jq '[.check_runs[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped")) | {name, status, conclusion}]'
-```
-
-Forbidden final states: "CI still running", "in progress", "will follow up", "monitoring".
-Keep polling and finishing closeout in the same session.
-
-The final message MUST begin with **`STATUS: COMPLETE`** or **`STATUS: BLOCKED`**, then
-final board column, PR number, merge commit SHA, and any children created — only after
-independent API verification of green CI on the merge commit.
-
-## Reporting
-
-Every status update states, in order: what happened, what it means for the work item, and
-what happens next — plain software-team vocabulary (work item, defect, pull request,
-build, automated tests, board status), no orchestration jargon. Finish with: final board
-column, PR number, merge commit SHA, and any children created.
+Never end a turn while CI, the merge, a deployment, the close or a card move is pending ("CI
+still running", "monitoring", "will follow up" are forbidden final states). The final message
+begins with **`STATUS: COMPLETE`** or **`STATUS: BLOCKED`**, then: final column, PR, merge SHA,
+the evidence, card moves that fell back to a comment, children created. Every status update
+says what happened, what it means for the work item, and what happens next, in software-team
+vocabulary (work item, defect, pull request, build, release, deployment, board status).
