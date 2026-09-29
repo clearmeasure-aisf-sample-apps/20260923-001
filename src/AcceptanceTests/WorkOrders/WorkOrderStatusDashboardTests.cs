@@ -27,4 +27,20 @@ public class WorkOrderStatusDashboardTests : AcceptanceTestBase
             countText.ShouldMatch(@"^\d+$");
         }
     }
+
+    [Test, Retry(2)]
+    public async Task ShouldShowOpenWorkOrderTotalWhenAuthenticated()
+    {
+        await LoginAsCurrentUser();
+
+        await Page.GotoAsync("/");
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        var summary = Page.GetByTestId(nameof(IndexPage.Elements.OpenWorkOrders));
+        await Expect(summary).ToBeVisibleAsync();
+        await Expect(summary).ToContainTextAsync("open work orders");
+
+        var countText = await Page.GetByTestId(nameof(IndexPage.Elements.OpenWorkOrdersCount)).InnerTextAsync();
+        countText.ShouldMatch(@"^\d+$");
+    }
 }

@@ -284,3 +284,16 @@
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.12);
 }
+.open-work-orders {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1.5rem 0 0.75rem;
+    font-size: 1.1rem;
+}
+
+.open-work-orders-count {
+    font-size: 2rem;
+    font-weight: 700;
+}

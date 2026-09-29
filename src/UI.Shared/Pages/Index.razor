@@ -53,6 +53,10 @@
 
     <AuthorizeView>
         <Authorized>
+            <div class="open-work-orders" data-testid="@nameof(Elements.OpenWorkOrders)">
+                <span class="open-work-orders-count" data-testid="@nameof(Elements.OpenWorkOrdersCount)">@OpenWorkOrderCount</span>
+                <span class="open-work-orders-label">open work orders</span>
+            </div>
             <div class="status-dashboard" data-testid="@nameof(Elements.StatusDashboard)">
                 @foreach (var status in StatusItems)
                 {
@@ -78,6 +82,8 @@
         GreetingBannerEmoji,
         StatusDashboard,
         StatusCard,
-        StatusCardCount
+        StatusCardCount,
+        OpenWorkOrders,
+        OpenWorkOrdersCount
     }
 }
