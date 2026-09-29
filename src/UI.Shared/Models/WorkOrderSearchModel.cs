@@ -31,4 +31,9 @@ public class WorkOrderSearchResultRow
     public string DueDateCssClass { get; init; } = string.Empty;
     public string? DueDateUrgencyText { get; init; }
     public DueDateUrgency Urgency { get; init; }
+
+    /// <summary>
+    /// Created date formatted as MMM d, yyyy; empty when the work order has no created date.
+    /// </summary>
+    public string CreatedDisplay { get; init; } = string.Empty;
 }

@@ -109,6 +109,7 @@
                                    Room @if (_sortColumn == "Room") { <span>@(_sortAscending ? "▲" : "▼")</span> }
                                </button>
                            </th>
+                           <th>Created</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -151,6 +152,7 @@
                                     }
                                 </td>
                                 <td>@order.WorkOrder.RoomNumber</td>
+                                <td data-testid="@(Elements.CreatedDateCell + order.Number)">@order.CreatedDisplay</td>
                             </tr>
                         }
                     }
@@ -178,7 +180,8 @@
         SortByDueDateButton,
         SortByTitleButton,
         SortByRoomButton,
-        AssignedToMeCheckbox
+        AssignedToMeCheckbox,
+        CreatedDateCell
     }
 
     public WorkOrderSearchModel Model { get; set; } = new();
