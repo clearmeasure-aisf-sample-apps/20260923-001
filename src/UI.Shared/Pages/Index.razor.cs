@@ -8,6 +8,13 @@ public partial class Index : AppComponentBase, IListener<WorkOrderChangedEvent>
 {
     private Dictionary<string, int> _statusCounts = new();
     private static readonly WorkOrderStatus[] StatusItems = WorkOrderStatus.GetAllItems();
+    private static readonly string[] ClosedStatusKeys = [WorkOrderStatus.Complete.Key, WorkOrderStatus.Cancelled.Key];
+
+    /// <summary>
+    /// Total work orders that are neither complete nor cancelled.
+    /// </summary>
+    private int OpenWorkOrderCount =>
+        _statusCounts.Where(pair => !ClosedStatusKeys.Contains(pair.Key)).Sum(pair => pair.Value);
 
     protected override async Task OnInitializedAsync()
     {
