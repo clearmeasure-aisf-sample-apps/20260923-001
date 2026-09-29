@@ -36,4 +36,9 @@ public class WorkOrderSearchResultRow
     /// Created date formatted as MMM d, yyyy; empty when the work order has no created date.
     /// </summary>
     public string CreatedDisplay { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Assigned date formatted as MMM d, yyyy; empty when the work order has not been assigned.
+    /// </summary>
+    public string AssignedDisplay { get; init; } = string.Empty;
 }

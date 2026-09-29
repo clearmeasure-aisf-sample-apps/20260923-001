@@ -190,7 +190,8 @@ public partial class WorkOrderSearch : AppComponentBase
             DueDateCssClass = DueDateUrgencyCalculator.CssClass(urgency),
             DueDateUrgencyText = DueDateUrgencyCalculator.ScreenReaderText(urgency),
             Urgency = urgency,
-            CreatedDisplay = workOrder.CreatedDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? string.Empty
+            CreatedDisplay = workOrder.CreatedDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? string.Empty,
+            AssignedDisplay = workOrder.AssignedDate?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? string.Empty
         };
     }
 

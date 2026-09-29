@@ -13,55 +13,54 @@ using Shouldly;
 namespace ClearMeasure.Bootcamp.UnitTests.UI.Shared.Pages;
 
 [TestFixture]
-public class WorkOrderSearchCreatedColumnTests
+public class WorkOrderSearchAssignedColumnTests
 {
     [Test]
-    public async Task ShouldShowCreatedColumnHeader()
+    public async Task ShouldShowAssignedColumnHeaderAfterCreated()
     {
         await using var ctx = CreateContext(new StubBus());
 
         var component = ctx.Render<WorkOrderSearch>();
 
         var headers = component.FindAll(".grid-data thead th").Select(h => h.TextContent.Trim()).ToArray();
-        headers.ShouldContain("Created");
+        var createdIndex = Array.IndexOf(headers, "Created");
+        headers[createdIndex + 1].ShouldBe("Assigned");
     }
 
     [Test]
-    public async Task ShouldShowFormattedCreatedDate_WhenCreatedDateIsSet()
+    public async Task ShouldShowFormattedAssignedDate_WhenAssignedDateIsSet()
     {
-        var workOrder = new WorkOrder
-        {
-            Number = "WO-CRT",
-            Title = "Created column",
-            Status = WorkOrderStatus.Draft,
-            Creator = new Employee("jpalermo", "Jeffrey", "Palermo", "jeffrey@example.com"),
-            CreatedDate = new DateTime(2026, 3, 7, 14, 30, 0)
-        };
+        var workOrder = NewWorkOrder("WO-ASG", new DateTime(2026, 4, 2, 10, 15, 0));
         await using var ctx = CreateContext(new StubBus([workOrder]));
 
         var component = ctx.Render<WorkOrderSearch>();
 
-        var cell = component.Find($"[data-testid='{WorkOrderSearch.Elements.CreatedDateCell}WO-CRT']");
-        cell.TextContent.Trim().ShouldBe("Mar 7, 2026");
+        var cell = component.Find($"[data-testid='{WorkOrderSearch.Elements.AssignedDateCell}WO-ASG']");
+        cell.TextContent.Trim().ShouldBe("Apr 2, 2026");
     }
 
     [Test]
-    public async Task ShouldShowBlankCreatedCell_WhenCreatedDateIsNull()
+    public async Task ShouldShowBlankAssignedCell_WhenAssignedDateIsNull()
     {
-        var workOrder = new WorkOrder
-        {
-            Number = "WO-NOD",
-            Title = "No created date",
-            Status = WorkOrderStatus.Draft,
-            Creator = new Employee("jpalermo", "Jeffrey", "Palermo", "jeffrey@example.com"),
-            CreatedDate = null
-        };
+        var workOrder = NewWorkOrder("WO-UNA", null);
         await using var ctx = CreateContext(new StubBus([workOrder]));
 
         var component = ctx.Render<WorkOrderSearch>();
 
-        var cell = component.Find($"[data-testid='{WorkOrderSearch.Elements.CreatedDateCell}WO-NOD']");
+        var cell = component.Find($"[data-testid='{WorkOrderSearch.Elements.AssignedDateCell}WO-UNA']");
         cell.TextContent.Trim().ShouldBeEmpty();
+    }
+
+    private static WorkOrder NewWorkOrder(string number, DateTime? assignedDate)
+    {
+        return new WorkOrder
+        {
+            Number = number,
+            Title = "Assigned column",
+            Status = WorkOrderStatus.Draft,
+            Creator = new Employee("jpalermo", "Jeffrey", "Palermo", "jeffrey@example.com"),
+            AssignedDate = assignedDate
+        };
     }
 
     private static BunitContext CreateContext(IBus bus)
