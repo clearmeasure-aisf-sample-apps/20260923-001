@@ -21,21 +21,15 @@ This repo still documents and uses additional branch patterns. Do not assume a s
 | Pattern | Where it appears | Example |
 |---|---|---|
 | `<tool>/<issue-number>-<column>` | Canonical for board-driven agents (this page) | `ibmbob/1234-development` |
-| `feature/issue-{number}-{slug}` | AI Factory executor (`.bob/skills/ai-factory-executor`) | `feature/issue-6936-demo-issue-4` |
 | `{username}/{branch-description}` | General Copilot / contributor guidance (`.github/copilot-instructions.md`) | `jeffreypalermo/fix-work-order-status` |
 
 Prefer the pattern required by the factory or instructions that launched the session. When in doubt for a board-driven IBM Bob session, use `<tool>/<issue-number>-<column>`.
 
 ## Branch lifecycle and checkout
 
-### Current AI Factory executor behavior
+### Retired AI Factory executor
 
-The checked-in AI Factory scripts still create the working branch **inside** the agent session after clone:
-
-- `agent-entrypoint.ps1` runs `git checkout -b $branchName` after cloning
-- `executor.ps1` (direct mode) likewise runs `git checkout -b $branchName`
-
-Those paths use the `feature/issue-{number}-{slug}` name from the executor, not the canonical `<tool>/…` pattern above.
+The AI Factory executor was retired (it relied on a personal `gh` token, audit row A4); the platform feature loop and Codefresh replace it.
 
 ### When a remote branch already exists
 
