@@ -99,5 +99,49 @@ public class FeatureLoopCredentialGuardTests
         }
     }
 
+    [Test]
+    public void ShouldNameNoRetiredProjectsToken_WhenFeatureLoopToolingIsScanned()
+    {
+        var retired = string.Concat("PROJECTS", "_", "PAT");
+        var root = GitHubScriptHost.RepositoryRoot;
+        var scanned = ToolingFiles.Select(GitHubScriptHost.Script)
+            .Concat(Directory.EnumerateFiles(Path.Join(root, ".claude", "skills"), "*", SearchOption.AllDirectories))
+            .Concat(Directory.EnumerateFiles(Path.Join(root, "scripts"), "*", SearchOption.AllDirectories))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var offenders = scanned.Where(path => File.ReadAllText(path).Contains(retired, StringComparison.Ordinal)).ToArray();
+
+        scanned.Length.ShouldBeGreaterThan(ToolingFiles.Length);
+        offenders.ShouldBeEmpty("these files still name the retired board personal access token secret");
+    }
+
+    [Test]
+    public void ShouldPinBoardWorkflowSecrets_WhenFactoryLoopJsonIsRead()
+    {
+        var dispatch = ReadConfig()["boardMoves"]!["dispatch"]!.AsObject();
+
+        dispatch["workflowSecrets"]!.AsArray().Select(node => node!.GetValue<string>()).ShouldBe(["BOARD_APP_ID", "BOARD_APP_PRIVATE_KEY"]);
+        dispatch.ContainsKey("workflowSecret").ShouldBeFalse("the single personal access token secret is replaced by workflowSecrets");
+    }
+
+    [Test]
+    public void ShouldListNoPullRequestTargetEvent_WhenAutomaticBoardMovesAreRead()
+    {
+        var automatic = ReadConfig()["boardMoves"]!["automatic"]!.AsObject();
+
+        automatic.Select(property => property.Key).Where(key => key.StartsWith("pull_request_target", StringComparison.Ordinal)).ShouldBeEmpty();
+        automatic.ContainsKey("pull_request.closed(merged)").ShouldBeTrue();
+    }
+
+    [Test]
+    public void ShouldDocumentTheAppCredentialForCardMoves_WhenReferenceIsRead()
+    {
+        var reference = File.ReadAllText(GitHubScriptHost.Script(".claude/skills/feature-loop/reference.md"));
+
+        reference.ShouldContain("BOARD_APP_ID");
+        reference.ShouldContain("BOARD_APP_PRIVATE_KEY");
+        reference.ShouldContain("Contents: write");
+    }
     private static JsonNode ReadConfig() => JsonNode.Parse(File.ReadAllText(GitHubScriptHost.Script(".claude/factory-loop.json")))!;
 }
