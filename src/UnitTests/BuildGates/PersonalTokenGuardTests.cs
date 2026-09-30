@@ -19,10 +19,13 @@ public class PersonalTokenGuardTests
         ".ps1", ".sh", ".yml", ".yaml", ".md", ".cs", ".csx", ".json", ".txt", ".dockerfile", ".env"
     ];
 
-    // Owned by other audit rows: .claude/ fallback (rows B1/B2, tracked in #68) and this test file.
+    // Owned by other audit rows: the 'gh auth token' last-resort fallback of the GitHub App tooling (rows B1/B2,
+    // tracked in #68) in .claude/, scripts/github/GitHubAppAuth.ps1 and its tests; and this test file.
     private static readonly string[] AllowlistedPrefixes =
     [
         ".claude/",
+        "scripts/github/GitHubAppAuth.ps1",
+        "src/UnitTests/BuildGates/GitHubApp/",
         "src/UnitTests/BuildGates/PersonalTokenGuardTests.cs"
     ];
 
@@ -99,6 +102,8 @@ public class PersonalTokenGuardTests
             var bad = "$t = " + "gh auth " + "token";
             WriteFile(root, Path.Join(".claude", "skills", "board.ps1"), bad);
             WriteFile(root, Path.Join("src", "UnitTests", "BuildGates", "PersonalTokenGuardTests.cs"), bad);
+            WriteFile(root, Path.Join("scripts", "github", "GitHubAppAuth.ps1"), bad);
+            WriteFile(root, Path.Join("src", "UnitTests", "BuildGates", "GitHubApp", "GitHubScriptHost.cs"), bad);
             WriteFile(root, Path.Join("node_modules", "pkg", "x.md"), bad);
             WriteFile(root, Path.Join("bin", "x.json"), bad);
             WriteFile(root, Path.Join("images", "logo.png"), bad);
