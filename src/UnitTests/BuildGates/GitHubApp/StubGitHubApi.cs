@@ -39,11 +39,11 @@ internal sealed class StubGitHubApi : IDisposable
     public const string PreMintedAppToken = "stub-preminted-app-token-0003";
 
     /// <summary>The head commit of the stub's pull request.</summary>
-    public const string HeadSha = "0123456789abcdef0123456789abcdef01234567";
+    private const string HeadSha = "0123456789abcdef0123456789abcdef01234567";
 
-    private readonly HttpListener listener = new();
-    private readonly List<StubRequest> requests = [];
-    private readonly Task loop;
+    private readonly HttpListener _listener = new();
+    private readonly List<StubRequest> _requests = [];
+    private readonly Task _loop;
 
     /// <summary>Starts the stub on a free loopback port.</summary>
     public StubGitHubApi()
@@ -53,31 +53,31 @@ internal sealed class StubGitHubApi : IDisposable
         var port = ((IPEndPoint)probe.LocalEndpoint).Port;
         probe.Stop();
         Url = $"http://127.0.0.1:{port}";
-        listener.Prefixes.Add(Url + "/");
-        listener.Start();
-        loop = Task.Run(ServeAsync);
+        _listener.Prefixes.Add(Url + "/");
+        _listener.Start();
+        _loop = Task.Run(ServeAsync);
     }
 
     /// <summary>Base URL, for GITHUB_API_URL.</summary>
     public string Url { get; }
 
     /// <summary>HTTP status of the token exchange (201 = a token is minted).</summary>
-    public int MintStatus { get; set; } = 201;
+    public int MintStatus { get; init; } = 201;
 
     /// <summary><c>true</c>: the App token may read commit statuses; <c>false</c>: it gets 403, as the real App does.</summary>
-    public bool AppMayReadStatuses { get; set; } = true;
+    public bool AppMayReadStatuses { get; init; } = true;
 
     /// <summary>HTTP status a full-rights token gets for a repository dispatch (204 = accepted).</summary>
-    public int DispatchStatusForCli { get; set; } = 204;
+    public int DispatchStatusForCli { get; init; } = 204;
 
     /// <summary>Requests in arrival order.</summary>
     public IReadOnlyList<StubRequest> Requests
     {
         get
         {
-            lock (requests)
+            lock (_requests)
             {
-                return requests.ToArray();
+                return _requests.ToArray();
             }
         }
     }
@@ -85,10 +85,10 @@ internal sealed class StubGitHubApi : IDisposable
     /// <summary>Stops the stub.</summary>
     public void Dispose()
     {
-        listener.Close();
+        _listener.Close();
         try
         {
-            loop.Wait(TimeSpan.FromSeconds(5));
+            _loop.Wait(TimeSpan.FromSeconds(5));
         }
         catch (AggregateException)
         {
@@ -125,12 +125,12 @@ internal sealed class StubGitHubApi : IDisposable
 
     private async Task ServeAsync()
     {
-        while (listener.IsListening)
+        while (_listener.IsListening)
         {
             HttpListenerContext context;
             try
             {
-                context = await listener.GetContextAsync().ConfigureAwait(false);
+                context = await _listener.GetContextAsync().ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is HttpListenerException or ObjectDisposedException or InvalidOperationException)
             {
@@ -140,9 +140,9 @@ internal sealed class StubGitHubApi : IDisposable
             using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
             var body = await reader.ReadToEndAsync().ConfigureAwait(false);
             var request = new StubRequest(context.Request.HttpMethod, context.Request.RawUrl ?? string.Empty, context.Request.Headers["Authorization"] ?? string.Empty, body);
-            lock (requests)
+            lock (_requests)
             {
-                requests.Add(request);
+                _requests.Add(request);
             }
 
             var (status, answer) = Answer(request);

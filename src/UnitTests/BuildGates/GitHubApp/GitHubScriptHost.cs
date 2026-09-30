@@ -17,19 +17,19 @@ internal sealed record ProcessResult(int ExitCode, string Output, string Error)
 /// <summary>A throw-away RSA key of the GitHub App, generated at test time (never committed).</summary>
 internal sealed class GeneratedAppKey : IDisposable
 {
-    private readonly string directory = Directory.CreateTempSubdirectory("app-key-").FullName;
+    private readonly string _directory = Directory.CreateTempSubdirectory("app-key-").FullName;
 
     /// <summary>Generates a 2048-bit key and writes its PEM to a file.</summary>
     public GeneratedAppKey()
     {
         Rsa = RSA.Create(2048);
         Pem = Rsa.ExportRSAPrivateKeyPem();
-        Path = System.IO.Path.Join(directory, "app-private-key.pem");
+        Path = System.IO.Path.Join(_directory, "app-private-key.pem");
         File.WriteAllText(Path, Pem);
     }
 
     /// <summary>The key.</summary>
-    public RSA Rsa { get; }
+    private RSA Rsa { get; }
 
     /// <summary>The private key as PEM text.</summary>
     public string Pem { get; }
@@ -55,7 +55,7 @@ internal sealed class GeneratedAppKey : IDisposable
         Rsa.Dispose();
         try
         {
-            Directory.Delete(directory, recursive: true);
+            Directory.Delete(_directory, recursive: true);
         }
         catch (IOException)
         {
@@ -76,11 +76,11 @@ internal sealed class StubGhCli : IDisposable
         Directory = System.IO.Directory.CreateTempSubdirectory("stub-gh-").FullName;
         if (OperatingSystem.IsWindows())
         {
-            File.WriteAllText(System.IO.Path.Join(Directory, "gh.cmd"), "@echo off\r\nif \"%FAKE_GH_TOKEN%\"==\"\" exit /b 1\r\necho %FAKE_GH_TOKEN%\r\n");
+            File.WriteAllText(Path.Join(Directory, "gh.cmd"), "@echo off\r\nif \"%FAKE_GH_TOKEN%\"==\"\" exit /b 1\r\necho %FAKE_GH_TOKEN%\r\n");
         }
         else
         {
-            var path = System.IO.Path.Join(Directory, "gh");
+            var path = Path.Join(Directory, "gh");
             File.WriteAllText(path, "#!/bin/sh\n[ -n \"$FAKE_GH_TOKEN\" ] || exit 1\necho \"$FAKE_GH_TOKEN\"\n");
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
@@ -90,7 +90,7 @@ internal sealed class StubGhCli : IDisposable
     public string Directory { get; }
 
     /// <summary>The stub executable.</summary>
-    public string Executable => System.IO.Path.Join(Directory, OperatingSystem.IsWindows() ? "gh.cmd" : "gh");
+    public string Executable => Path.Join(Directory, OperatingSystem.IsWindows() ? "gh.cmd" : "gh");
 
     /// <summary>Deletes the folder.</summary>
     public void Dispose()
@@ -127,7 +127,7 @@ internal static class GitHubScriptHost
             var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
             while (directory != null)
             {
-                if (File.Exists(System.IO.Path.Join(directory.FullName, "build.ps1")))
+                if (File.Exists(Path.Join(directory.FullName, "build.ps1")))
                 {
                     return directory.FullName;
                 }
@@ -140,14 +140,14 @@ internal static class GitHubScriptHost
     }
 
     /// <summary>The pwsh executable; the build itself runs in PowerShell, so a missing one fails the test.</summary>
-    public static string Pwsh
+    private static string Pwsh
     {
         get
         {
-            var directories = (System.Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(System.IO.Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+            var directories = (System.Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
             foreach (var name in new[] { "pwsh", "pwsh.exe" })
             {
-                var found = directories.Select(directory => System.IO.Path.Join(directory, name)).FirstOrDefault(File.Exists);
+                var found = directories.Select(directory => Path.Join(directory, name)).FirstOrDefault(File.Exists);
                 if (found is not null)
                 {
                     return found;
@@ -160,7 +160,7 @@ internal static class GitHubScriptHost
 
     /// <summary>The repository-relative script as an absolute path.</summary>
     /// <param name="relative">Path with forward slashes.</param>
-    public static string Script(string relative) => System.IO.Path.Join(RepositoryRoot, relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
+    public static string Script(string relative) => Path.Join(RepositoryRoot, relative.Replace('/', Path.DirectorySeparatorChar));
 
     /// <summary>The environment of a run: every credential variable removed, then <paramref name="set"/> applied on top.</summary>
     /// <param name="api">The stub, for GITHUB_API_URL; <c>null</c> leaves it unset.</param>
@@ -178,7 +178,7 @@ internal static class GitHubScriptHost
 
         if (ghCli is not null)
         {
-            environment["PATH"] = ghCli.Directory + System.IO.Path.PathSeparator + System.Environment.GetEnvironmentVariable("PATH");
+            environment["PATH"] = ghCli.Directory + Path.PathSeparator + System.Environment.GetEnvironmentVariable("PATH");
         }
 
         foreach (var (name, value) in set)
@@ -219,7 +219,8 @@ internal static class GitHubScriptHost
             }
         }
 
-        using var process = new Process { StartInfo = start };
+        using var process = new Process();
+        process.StartInfo = start;
         var output = new StringBuilder();
         var error = new StringBuilder();
         process.OutputDataReceived += (_, data) => Append(output, data.Data);
@@ -230,7 +231,7 @@ internal static class GitHubScriptHost
         if (!process.WaitForExit(TimeSpan.FromMinutes(2)))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"{System.IO.Path.GetFileName(scriptPath)} did not finish in time");
+            Assert.Fail($"{Path.GetFileName(scriptPath)} did not finish in time");
         }
 
         process.WaitForExit();

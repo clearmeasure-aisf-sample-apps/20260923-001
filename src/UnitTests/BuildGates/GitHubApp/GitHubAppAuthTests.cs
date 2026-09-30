@@ -16,13 +16,13 @@ public class GitHubAppAuthTests
     private const string AppId = "5130401";
     private const long Now = 1_800_000_000;
 
-    private string scratch = null!;
+    private string _scratch = null!;
 
     [SetUp]
-    public void CreateScratch() => scratch = Directory.CreateTempSubdirectory("github-app-auth-").FullName;
+    public void CreateScratch() => _scratch = Directory.CreateTempSubdirectory("github-app-auth-").FullName;
 
     [TearDown]
-    public void DeleteScratch() => Directory.Delete(scratch, recursive: true);
+    public void DeleteScratch() => Directory.Delete(_scratch, recursive: true);
 
     [Test]
     public void ShouldProduceValidRs256Token_WhenKeyIsReadFromFile()
@@ -79,7 +79,7 @@ public class GitHubAppAuthTests
         var snippet = $"try {{ New-GitHubAppJwt -AppId '{AppId}' -Now {Now} | Out-Null; Write-Output 'NO-ERROR' }} catch {{ Write-Output $_.Exception.Message }}";
 
         var missing = Snippet(snippet);
-        var absentFile = Snippet(snippet, ("AISF_BOARD_APP_PRIVATE_KEY_PATH", Path.Join(scratch, "no-such-key.pem")));
+        var absentFile = Snippet(snippet, ("AISF_BOARD_APP_PRIVATE_KEY_PATH", Path.Join(_scratch, "no-such-key.pem")));
         var garbled = Snippet(snippet, ("AISF_BOARD_APP_PRIVATE_KEY", bogusKey));
 
         missing.Output.ShouldContain($"GitHub App {AppId}: no private key");
@@ -177,10 +177,11 @@ public class GitHubAppAuthTests
     {
         using var noGh = new StubGhCli();
         File.Delete(noGh.Executable);
+        var noGhDirectory = noGh.Directory;
         var snippet = "$resolved = Resolve-GitHubToken; if ($resolved) { Write-Output \"$($resolved.Source) $($resolved.Token)\" } else { Write-Output 'none' }";
 
-        var withToken = Snippet(snippet, environment => environment["PATH"] = noGh.Directory, ("GH_TOKEN", "env-token"), (GitHubScriptHost.RetiredTokenVariable, "decoy"));
-        var withoutToken = Snippet(snippet, environment => environment["PATH"] = noGh.Directory);
+        var withToken = Snippet(snippet, environment => environment["PATH"] = noGhDirectory, ("GH_TOKEN", "env-token"), (GitHubScriptHost.RetiredTokenVariable, "decoy"));
+        var withoutToken = Snippet(snippet, environment => environment["PATH"] = noGhDirectory);
 
         withToken.Output.Trim().ShouldBe("gh env-token");
         withoutToken.Output.Trim().ShouldBe("none");
@@ -261,7 +262,7 @@ public class GitHubAppAuthTests
 
     private ProcessResult RunSnippet(string body, Dictionary<string, string?> environment)
     {
-        var script = Path.Join(scratch, $"snippet-{Guid.NewGuid():N}.ps1");
+        var script = Path.Join(_scratch, $"snippet-{Guid.NewGuid():N}.ps1");
         File.WriteAllText(script, $"$ErrorActionPreference = 'Stop'\n. '{GitHubScriptHost.Script("scripts/github/GitHubAppAuth.ps1")}'\n{body}\n");
         return GitHubScriptHost.Run(script, environment);
     }
