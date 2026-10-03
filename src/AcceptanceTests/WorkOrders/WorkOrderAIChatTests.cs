@@ -10,7 +10,7 @@ public class WorkOrderAiChatTests : AcceptanceTestBase
         await SkipIfNoChatClient();
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldSendChatMessageAndReceiveResponse()
     {
         await LoginAsCurrentUser();
@@ -39,7 +39,7 @@ public class WorkOrderAiChatTests : AcceptanceTestBase
         chatHistoryText.ShouldContain(prompt);
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldRespondToChat()
     {
         await LoginAsCurrentUser();

@@ -90,6 +90,7 @@ DbUp scripts in `src/Database/scripts/Update/`, numbered sequentially (`###_Desc
 - UI component tests: bUnit
 - Acceptance tests: Playwright with helpers from `AcceptanceTestBase` (`LoginAsCurrentUser()`, `Click()`, `Input()`, `Select()`)
 - Live-LLM tests: mark with `[LlmTest]` (from `IntegrationTests/TestSupport`) instead of `[Retry(n)]`. The test gets 3 attempts; if none pass it is reported as a **warning**, not a build failure. Rate-limit `Assert.Ignore` and `Inconclusive` results pass through unchanged.
+- Every test that calls the live AI model (uses `AI_OpenAI_ApiKey`) must also carry `[Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]` so it never runs in the integration build, the acceptance-test suite, or any CI/deploy pipeline. Run one manually by selecting it by name, e.g. `--filter "FullyQualifiedName~TranslationServiceTests.ShouldTranslateTextToSpanish"`.
 
 **Code style:**
 - PascalCase for classes/methods, camelCase for variables

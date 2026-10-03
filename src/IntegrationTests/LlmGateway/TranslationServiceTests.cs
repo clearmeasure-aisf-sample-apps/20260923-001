@@ -8,6 +8,7 @@ public class TranslationServiceTests : LlmTestBase
 {
     [Test]
     [LlmTest]
+    [Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldTranslateTextToSpanish()
     {
         var factory = TestHost.GetRequiredService<ChatClientFactory>();
@@ -21,6 +22,7 @@ public class TranslationServiceTests : LlmTestBase
 
     [Test]
     [LlmTest]
+    [Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldTranslateTextToGerman()
     {
         var factory = TestHost.GetRequiredService<ChatClientFactory>();

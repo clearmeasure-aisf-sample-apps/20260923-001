@@ -14,6 +14,7 @@ public class CanConnectToLlmServerHealthCheckTests : LlmTestBase
 {
     [Test]
     [LlmTest]
+    [Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task CheckHealthAsync_WithCurrentConfiguration_ReturnsResult()
     {
         var healthCheck = TestHost.GetRequiredService<CanConnectToLlmServerHealthCheck>();
