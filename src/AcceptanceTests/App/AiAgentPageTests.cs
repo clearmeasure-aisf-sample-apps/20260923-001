@@ -12,7 +12,7 @@ public class AiAgentPageTests : AcceptanceTestBase
         await SkipIfNoChatClient();
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldKeepPromptVisibleWhenResizingWithLongConversation()
     {
         await LoginAsCurrentUser();

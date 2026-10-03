@@ -9,7 +9,8 @@ namespace ClearMeasure.Bootcamp.IntegrationTests.TestSupport;
 /// If every attempt fails or errors, the result is reported as a <see cref="ResultState.Warning"/> instead of a
 /// failure so that model nondeterminism does not fail the build. Passed, Ignored (for example an Azure OpenAI
 /// rate-limit skip), and Inconclusive outcomes stop the retry loop and are reported unchanged.
-/// Use together with <c>[Test]</c> in place of <c>[Retry(n)]</c>.
+/// Use together with <c>[Test]</c> in place of <c>[Retry(n)]</c>, and add <c>[Explicit]</c> so live-model tests never run
+/// in automated builds or deployments.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class LlmTestAttribute : NUnitAttribute, IRepeatTest

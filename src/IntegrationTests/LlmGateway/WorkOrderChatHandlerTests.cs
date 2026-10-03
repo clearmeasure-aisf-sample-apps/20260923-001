@@ -8,6 +8,7 @@ namespace ClearMeasure.Bootcamp.IntegrationTests.LlmGateway;
 public class WorkOrderChatHandlerTests : LlmTestBase
 {
     [Test]
+    [Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task Handle_WithValidWorkOrder_ReturnsChatResponse()
     {
         var workOrder = Faker<WorkOrder>();
@@ -41,6 +42,7 @@ public class WorkOrderChatHandlerTests : LlmTestBase
     }
 
     [Test]
+    [Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task Handle_WithListEmployeesPrompt_ReturnsEmployeeData()
     {
         new ZDataLoader().LoadData();

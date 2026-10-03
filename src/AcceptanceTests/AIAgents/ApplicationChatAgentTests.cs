@@ -20,7 +20,7 @@ public class ApplicationChatAgentTests : AcceptanceTestBase
         await SkipIfNoChatClient();
     }
 
-    [Test, Ignore("Flaky on CI: MCP loopback ToolProvider produces JSON deserialization error on GitHub Actions runners")]
+    [Test, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually"), Ignore("Flaky on CI: MCP loopback ToolProvider produces JSON deserialization error on GitHub Actions runners")]
     public async Task ShouldCreateWorkOrderViaAiAgentChat()
     {
         await LoginAsCurrentUser();

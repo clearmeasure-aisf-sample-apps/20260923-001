@@ -32,7 +32,7 @@ public class McpServerLlmAcceptanceTests : AcceptanceTestBase
         await SkipIfNoChatClient();
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldListWorkOrdersViaLlm()
     {
         var response = await _helper!.SendPrompt(
@@ -42,7 +42,7 @@ public class McpServerLlmAcceptanceTests : AcceptanceTestBase
         response.Text.ShouldNotBeNullOrEmpty();
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldGetWorkOrderByNumberViaLlm()
     {
         var bus = TestHost.GetRequiredService<IBus>();
@@ -57,7 +57,7 @@ public class McpServerLlmAcceptanceTests : AcceptanceTestBase
         response.Text.ShouldContain(knownOrder.Title!);
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldCreateWorkOrderViaLlm()
     {
         var bus = TestHost.GetRequiredService<IBus>();
@@ -75,7 +75,7 @@ public class McpServerLlmAcceptanceTests : AcceptanceTestBase
             .ShouldBeTrue($"Expected creation confirmation in response: {response.Text}");
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldListEmployeesViaLlm()
     {
         var bus = TestHost.GetRequiredService<IBus>();

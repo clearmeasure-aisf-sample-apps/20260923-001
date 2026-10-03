@@ -32,7 +32,7 @@ public class McpWorkOrderLifecycleLlmTests : AcceptanceTestBase
         await SkipIfNoChatClient();
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldCompleteFullLifecycleViaLlm()
     {
         var bus = TestHost.GetRequiredService<IBus>();
@@ -74,7 +74,7 @@ public class McpWorkOrderLifecycleLlmTests : AcceptanceTestBase
             .ShouldBeTrue($"Expected 'complete' status in response: {response.Text}");
     }
 
-    [Test, LlmTest]
+    [Test, LlmTest, Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldCreateAndAssignWorkOrderViaLlm()
     {
         var bus = TestHost.GetRequiredService<IBus>();

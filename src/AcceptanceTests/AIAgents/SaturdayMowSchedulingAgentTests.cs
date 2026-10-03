@@ -24,6 +24,7 @@ public class SaturdayMowSchedulingAgentTests : AcceptanceTestBase
 
     [Test]
     [LlmTest]
+    [Explicit("Calls the live AI model (AI_OpenAI_ApiKey); run manually")]
     public async Task ShouldCreateTenSaturdayMowsForWillieViaAiAgent()
     {
         await Page.GotoAsync("/login");
