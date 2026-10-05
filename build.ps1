@@ -54,7 +54,8 @@ Function Init {
 	Initialize-SqlServerModule
 
 	if (Test-IsLinux) {
-		if (-not (Test-IsGitHubActions)) {
+		# A cache location that is already set is kept: /tmp can be a small, quota-limited tmpfs.
+		if (-not (Test-IsGitHubActions) -and [string]::IsNullOrEmpty($env:NUGET_PACKAGES)) {
 			$env:NUGET_PACKAGES = "/tmp/nuget-packages"
 		}
 	}
@@ -454,7 +455,13 @@ Function AcceptanceTests {
 	$playwrightScript = Join-PathSegments "bin" "Release" $framework "playwright.ps1"
 
 	if (Test-Path $playwrightScript) {
-		& pwsh $playwrightScript install chromium --with-deps
+		# '--with-deps' installs OS packages through apt-get on Linux; a distribution without it gets the browser only.
+		$playwrightInstallArguments = @("install", "chromium", "--with-deps")
+		if ((Test-IsLinux) -and -not (Get-Command apt-get -ErrorAction SilentlyContinue)) {
+			Log-Message -Message "apt-get not found: installing Playwright chromium without OS dependencies." -Type "WARNING"
+			$playwrightInstallArguments = @("install", "chromium")
+		}
+		& pwsh $playwrightScript @playwrightInstallArguments
 		if ($LASTEXITCODE -ne 0) {
 			throw "Failed to install Playwright chromium"
 		}
