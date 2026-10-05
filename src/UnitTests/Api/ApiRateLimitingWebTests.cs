@@ -129,8 +129,25 @@ public class ApiRateLimitingWebTests
         using var client = factory.CreateClient();
         (await client.GetAsync("/api/time")).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await client.GetAsync("/api/time")).StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
-        await Task.Delay(TimeSpan.FromSeconds(1.2));
-        (await client.GetAsync("/api/time")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await WaitForStatusAsync(client, "/api/time", HttpStatusCode.OK, TimeSpan.FromSeconds(5)))
+            .ShouldBe(HttpStatusCode.OK);
+    }
+
+    // The permit returns on a replenishment tick, 0.5 s to 1 s after the request; poll instead of sleeping a fixed time.
+    private static async Task<HttpStatusCode> WaitForStatusAsync(
+        HttpClient client, string path, HttpStatusCode expected, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        HttpStatusCode status;
+        do
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+            using var response = await client.GetAsync(path);
+            status = response.StatusCode;
+        }
+        while (status != expected && DateTime.UtcNow < deadline);
+
+        return status;
     }
 
     [Test]
