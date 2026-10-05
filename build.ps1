@@ -454,7 +454,13 @@ Function AcceptanceTests {
 	$playwrightScript = Join-PathSegments "bin" "Release" $framework "playwright.ps1"
 
 	if (Test-Path $playwrightScript) {
-		& pwsh $playwrightScript install chromium --with-deps
+		# '--with-deps' installs OS packages through apt-get on Linux; a distribution without it gets the browser only.
+		$playwrightInstallArguments = @("install", "chromium", "--with-deps")
+		if ((Test-IsLinux) -and -not (Get-Command apt-get -ErrorAction SilentlyContinue)) {
+			Log-Message -Message "apt-get not found: installing Playwright chromium without OS dependencies." -Type "WARNING"
+			$playwrightInstallArguments = @("install", "chromium")
+		}
+		& pwsh $playwrightScript @playwrightInstallArguments
 		if ($LASTEXITCODE -ne 0) {
 			throw "Failed to install Playwright chromium"
 		}
