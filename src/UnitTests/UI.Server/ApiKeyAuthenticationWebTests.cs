@@ -1,5 +1,7 @@
 using System.Net;
 using ClearMeasure.Bootcamp.UI.Shared;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Shouldly;
 
 namespace ClearMeasure.Bootcamp.UnitTests.UI.Server;
@@ -7,6 +9,17 @@ namespace ClearMeasure.Bootcamp.UnitTests.UI.Server;
 [TestFixture]
 public class ApiKeyAuthenticationWebTests
 {
+    [Test]
+    public async Task Should_RemoveNServiceBusHostedService_When_HostingApiKeyTests()
+    {
+        await using var factory = new ApiKeyProtectedWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        factory.Services.GetServices<IHostedService>()
+            .Select(service => service.GetType().FullName ?? string.Empty)
+            .ShouldNotContain(name => name.StartsWith("NServiceBus", StringComparison.Ordinal));
+    }
+
     [Test]
     public async Task Should_Return200_When_ApiHealthCalledWithoutKey()
     {
