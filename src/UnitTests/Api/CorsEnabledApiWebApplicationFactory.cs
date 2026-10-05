@@ -1,6 +1,7 @@
 using ClearMeasure.Bootcamp.UI.Server;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 
 namespace ClearMeasure.Bootcamp.UnitTests.Api;
@@ -13,6 +14,7 @@ public sealed class CorsEnabledApiWebApplicationFactory : WebApplicationFactory<
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureTestServices(NServiceBusTestHost.RemoveNServiceBusHostedService);
         builder.UseSetting("ConnectionStrings:SqlConnectionString", "Data Source=:memory:");
         builder.UseSetting("Cors:Enabled", "true");
         builder.UseSetting("Cors:AllowedOrigins:0", "https://allowed.example");

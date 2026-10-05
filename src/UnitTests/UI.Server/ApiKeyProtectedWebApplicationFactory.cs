@@ -1,6 +1,8 @@
 using ClearMeasure.Bootcamp.UI.Server;
+using ClearMeasure.Bootcamp.UnitTests.Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 
 namespace ClearMeasure.Bootcamp.UnitTests.UI.Server;
@@ -15,6 +17,7 @@ public sealed class ApiKeyProtectedWebApplicationFactory : WebApplicationFactory
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureTestServices(NServiceBusTestHost.RemoveNServiceBusHostedService);
         builder.UseSetting("ConnectionStrings:SqlConnectionString", "Data Source=:memory:");
         builder.ConfigureAppConfiguration((_, config) =>
         {
