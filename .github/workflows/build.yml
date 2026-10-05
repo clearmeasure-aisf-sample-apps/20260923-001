@@ -185,10 +185,11 @@ jobs:
           path: 'build/test/**/*.trx'
           reporter: dotnet-trx
 
-      # Publish code coverage
+      # Publish code coverage (an upload to an external service: a failure there must not fail the build)
       - name: Publish Code Coverage
         uses: codecov/codecov-action@v4
         if: always()
+        continue-on-error: true
         with:
           files: '**/build/test/**/In/**/coverage.cobertura.xml'
           flags: unittests-linux
