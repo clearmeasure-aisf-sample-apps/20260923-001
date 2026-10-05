@@ -44,6 +44,13 @@ public class FeatureFlagsControllerTests
     }
 
     [Test]
+    public void All_Should_ContainEnabledDeliveryPipelineCheckFlag_When_CatalogAccessed()
+    {
+        FeatureFlagsCatalog.All.ShouldContainKey("DeliveryPipelineCheck");
+        FeatureFlagsCatalog.All["DeliveryPipelineCheck"].ShouldBeTrue();
+    }
+
+    [Test]
     public void Get_Should_SerializeFlagKeysAsCatalogNames_When_UsingWebJsonDefaults()
     {
         var controller = new FeatureFlagsController

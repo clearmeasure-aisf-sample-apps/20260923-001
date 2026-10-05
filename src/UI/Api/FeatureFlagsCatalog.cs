@@ -12,6 +12,7 @@ public static class FeatureFlagsCatalog
         new Dictionary<string, bool>(StringComparer.Ordinal)
         {
             ["SampleFeatureA"] = true,
-            ["SampleFeatureB"] = false
+            ["SampleFeatureB"] = false,
+            ["DeliveryPipelineCheck"] = true
         };
 }
