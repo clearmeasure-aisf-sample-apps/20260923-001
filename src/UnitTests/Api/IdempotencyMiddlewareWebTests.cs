@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using System.Net;
 using System.Text;
 using ClearMeasure.Bootcamp.UI.Server;
@@ -100,6 +101,7 @@ internal sealed class IdempotencyMaxKeyWebApplicationFactory : WebApplicationFac
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureTestServices(NServiceBusTestHost.RemoveNServiceBusHostedService);
         builder.UseSetting("ConnectionStrings:SqlConnectionString", "Data Source=:memory:");
         builder.ConfigureAppConfiguration((_, config) =>
         {
