@@ -17,7 +17,7 @@ public class CodecovUploadTests
     public void ShouldNotFailTheJob_WhenCodecovUploadFails()
     {
         var blockingSteps = ReadCodecovSteps()
-            .Where(step => !step.Any(line => line.Trim() == "continue-on-error: true"))
+            .Where(step => step.All(line => line.Trim() != "continue-on-error: true"))
             .Select(step => step[0].Trim())
             .ToArray();
 
