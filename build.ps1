@@ -54,7 +54,8 @@ Function Init {
 	Initialize-SqlServerModule
 
 	if (Test-IsLinux) {
-		if (-not (Test-IsGitHubActions)) {
+		# A cache location that is already set is kept: /tmp can be a small, quota-limited tmpfs.
+		if (-not (Test-IsGitHubActions) -and [string]::IsNullOrEmpty($env:NUGET_PACKAGES)) {
 			$env:NUGET_PACKAGES = "/tmp/nuget-packages"
 		}
 	}
