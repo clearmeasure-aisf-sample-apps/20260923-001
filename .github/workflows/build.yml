@@ -969,6 +969,16 @@ jobs:
           path: build/test/**/*.trx
           retention-days: 2
 
+      # Playwright traces of failed tests (AcceptanceTestBase keeps them under playwright-traces by default)
+      - name: Upload Playwright Traces
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces-acceptance
+          path: '**/playwright-traces/*.zip'
+          if-no-files-found: ignore
+          retention-days: 7
+
   acceptance-tests-arm:
     name: Acceptance Tests (ARM SQLite)
     needs: changes
@@ -1039,6 +1049,16 @@ jobs:
           name: test-results-acceptance-arm
           path: build/test/**/*.trx
           retention-days: 2
+
+      # Playwright traces of failed tests (AcceptanceTestBase keeps them under playwright-traces by default)
+      - name: Upload Playwright Traces
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces-acceptance-arm
+          path: '**/playwright-traces/*.zip'
+          if-no-files-found: ignore
+          retention-days: 7
 
   build-result:
     name: Build result
