@@ -1,4 +1,3 @@
-using BlazorApplicationInsights;
 using ClearMeasure.Bootcamp.Core;
 using ClearMeasure.Bootcamp.UI.Client;
 using Lamar;
@@ -7,6 +6,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.JSInterop;
 using Toolbelt.Blazor.Extensions.DependencyInjection;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
@@ -16,12 +16,9 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddSingleton<IHostEnvironment>(new WasmHostEnvironment(builder.HostEnvironment));
 var configurationModel = new ConfigurationModel
-    { AppInsightsConnectionString = "" }; //await http.GetFromJsonAsync<ConfigurationModel>("Configuration");}
+    { AppInsightsConnectionString = builder.Configuration[BrowserTelemetry.ConnectionStringKey] };
 
-builder.Services.AddBlazorApplicationInsights(x =>
-{
-    x.ConnectionString = configurationModel.AppInsightsConnectionString;
-});
+builder.Services.AddBrowserTelemetry(configurationModel);
 
 // Add authentication services
 builder.Services.AddAuthorizationCore();
@@ -33,5 +30,6 @@ builder.ConfigureContainer<ServiceRegistry>(
 
 
 var app = builder.Build();
+await BrowserTelemetry.StartAsync(app.Services.GetRequiredService<IJSRuntime>(), configurationModel);
 await app.Services.GetRequiredService<HealthCheckService>().CheckHealthAsync();
 await app.RunAsync();
