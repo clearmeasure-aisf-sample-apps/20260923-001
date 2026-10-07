@@ -171,6 +171,20 @@ Also available as `/api/v1.0/features/flags`.
 
 Pattern: no `IBus`, no query, no handler — pure static data. API-key middleware guards automatically. Rate-limited by `ApiRateLimiting.PolicyName`.
 
+## Build Facts
+
+What a deployed app says about the build it runs, for the health dashboard's "Code" card — anonymous, read-only, no DB access, no MediatR:
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/_build` | GET | `{ version, commit, commitUrl, builtAt, buildUrl, code, tests, coverage, complexity, crap, analysis }`; a fact the build did not measure is `null` |
+
+**Record:** `build-facts.json` in the content root. The Codefresh release pipeline writes it into the UI image's files before the image is built (environment repo, `codefresh/apps/workorders/scripts/build-facts.ps1`); this repository's build scripts do not produce it. Without a record (local `dotnet run`, test hosts, preview images) the answer has the assembly's version and nulls.
+**Code:** `src/UI/Server/BuildFacts/` — `BuildFactsDocument` (shape), `BuildFactsProvider` (reads the record once), `BuildFactsEndpoint` (route).
+**Version:** always the running assembly's (the one `/api/version` reports); a record that names another version is ignored with a warning.
+
+Outside `/api`: no API key, no rate limit. Cross-origin reads follow the server-wide `Cors` policy, as `/_healthcheck` does.
+
 ## DI and Service Wiring
 
 Lamar container configured in `src/UI/Server/UIServiceRegistry.cs`. Assembly scanning auto-registers MediatR handlers and services. The `IBus` interface wraps MediatR's `IMediator`.
