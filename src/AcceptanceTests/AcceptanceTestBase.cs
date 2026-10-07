@@ -92,6 +92,11 @@ public abstract class AcceptanceTestBase
             ViewportSize = new ViewportSize { Width = 800, Height = 600 }
         });
         browserContext.SetDefaultTimeout(60_000);
+
+        // The app's page loads the Application Insights browser SDK, which posts telemetry to Azure. A telemetry
+        // request that never completes keeps the page from reaching NetworkIdle, and a test then times out although
+        // the page is ready. The suite answers those requests itself, so it does not depend on that service.
+        await browserContext.RouteAsync(TelemetryEndpoints.Pattern, TelemetryEndpoints.AnswerAsync);
         
         var tracing = ShouldTrace(TraceModeSettings.Current, TestContext.CurrentContext.CurrentRepeatCount);
         if (tracing)
