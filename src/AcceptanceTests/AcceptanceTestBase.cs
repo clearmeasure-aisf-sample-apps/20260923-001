@@ -93,9 +93,10 @@ public abstract class AcceptanceTestBase
         });
         browserContext.SetDefaultTimeout(60_000);
 
-        // The app's page loads the Application Insights browser SDK, which posts telemetry to Azure. A telemetry
-        // request that never completes keeps the page from reaching NetworkIdle, and a test then times out although
-        // the page is ready. The suite answers those requests itself, so it does not depend on that service.
+        // With a connection string configured, the app's page loads the Application Insights browser SDK, which posts
+        // telemetry to Azure. A telemetry request that never completes keeps the page from reaching NetworkIdle, and
+        // a test then times out although the page is ready. The suite answers those requests itself, so it does not
+        // depend on that service; with nothing configured the page sends none (BrowserTelemetryTests).
         await browserContext.RouteAsync(TelemetryEndpoints.Pattern, TelemetryEndpoints.AnswerAsync);
         
         var tracing = ShouldTrace(TraceModeSettings.Current, TestContext.CurrentContext.CurrentRepeatCount);
