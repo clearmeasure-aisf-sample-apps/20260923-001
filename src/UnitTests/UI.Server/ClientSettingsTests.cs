@@ -249,10 +249,11 @@ public class ClientSettingsTests
 
     private static DefaultHttpContext Request(string method, string path)
     {
-        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
-        context.Request.Method = method;
-        context.Request.Path = path;
-        return context;
+        return new DefaultHttpContext
+        {
+            Request = { Method = method, Path = path },
+            Response = { Body = new MemoryStream() }
+        };
     }
 
     private static string Body(HttpContext context) =>
