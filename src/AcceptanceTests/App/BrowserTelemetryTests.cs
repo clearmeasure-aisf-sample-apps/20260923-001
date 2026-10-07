@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
+using System.Text;
 using System.Text.RegularExpressions;
+using ClearMeasure.Bootcamp.UI.Client;
+using ClearMeasure.Bootcamp.UI.Server;
 using ClearMeasure.Bootcamp.UI.Shared;
 
 namespace ClearMeasure.Bootcamp.AcceptanceTests.App;
@@ -18,6 +20,7 @@ public partial class BrowserTelemetryTests : AcceptanceTestBase
     [Test, Retry(2)]
     public async Task ShouldSendNoTelemetryRequest_OnFullPageLoadAndNavigation_WhenNoConnectionStringIsConfigured()
     {
+        RequireTheSuiteServer();
         var telemetryRequests = new ConcurrentQueue<string>();
         var telemetryErrors = new ConcurrentQueue<string>();
         Page.Request += (_, request) =>
@@ -44,17 +47,32 @@ public partial class BrowserTelemetryTests : AcceptanceTestBase
     }
 
     [Test, Retry(2)]
-    public async Task ShouldLoadTelemetrySdk_OnFullPageLoad_WhenConnectionStringIsConfigured()
+    public async Task ShouldServeClientSettingsWithoutAConnectionString_WhenTheServerHasOnlyThePlaceholder()
+    {
+        RequireTheSuiteServer();
+
+        var response = await Page.APIRequest.GetAsync(ClientSettings.RequestPath);
+
+        response.Status.ShouldBe(200);
+        var settings = Settings(await response.TextAsync());
+        settings.ShouldNotBeEmpty();
+        settings.Keys.ShouldNotContain(key => key.Contains("ApplicationInsights", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Test, Retry(2)]
+    public async Task ShouldLoadTelemetrySdk_OnFullPageLoad_WhenTheServerGeneratesSettingsWithItsConnectionString()
     {
         var sdkRequests = new ConcurrentQueue<string>();
-        await Page.RouteAsync("**/appsettings.json", route => route.FulfillAsync(new RouteFulfillOptions
+        var servedSettings = new ConcurrentQueue<string>();
+        // The suite's one server has no connection string, so the browser is handed what a server that has one
+        // generates: the settings this server serves, merged by the server's own code (ClientSettings).
+        await Page.RouteAsync($"**{ClientSettings.RequestPath}", async route =>
         {
-            ContentType = "application/json",
-            Body = JsonSerializer.Serialize(new
-            {
-                ApplicationInsights = new { ConnectionString = ConfiguredConnectionString }
-            })
-        }));
+            var staticSettings = await (await route.FetchAsync()).TextAsync();
+            var settings = ClientSettings.Merge(staticSettings, ConfiguredConnectionString);
+            servedSettings.Enqueue(settings ?? string.Empty);
+            await route.FulfillAsync(new RouteFulfillOptions { ContentType = "application/json", Body = settings });
+        });
         await Page.RouteAsync(TelemetryEndpoints.SdkPattern, route =>
         {
             sdkRequests.Enqueue(route.Request.Url);
@@ -69,7 +87,30 @@ public partial class BrowserTelemetryTests : AcceptanceTestBase
         var connectionString = await Page.EvaluateAsync<string>("() => window.appInsights.config.connectionString");
         connectionString.ShouldBe(ConfiguredConnectionString);
         sdkRequests.ShouldHaveSingleItem().ShouldStartWith("https://js.monitor.azure.com/");
+        servedSettings.ShouldNotBeEmpty();
+        var served = Settings(servedSettings.First());
+        served[BrowserTelemetry.ConnectionStringKey].ShouldBe(ConfiguredConnectionString);
+        served.Count.ShouldBeGreaterThan(1);
     }
+
+    // The suite's own server runs with the all-zero placeholder (ServerFixture); a deployed server has its
+    // environment's connection string and serves it to the browser.
+    private static void RequireTheSuiteServer()
+    {
+        if (!ServerFixture.StartLocalServer)
+        {
+            Assert.Ignore("Requires the suite's own server, which has no Application Insights connection string");
+        }
+    }
+
+    // Reads settings the way the client does: through the JSON configuration provider.
+    private static Dictionary<string, string?> Settings(string json) =>
+        new ConfigurationBuilder()
+            .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
+            .Build()
+            .AsEnumerable()
+            .Where(setting => setting.Value is not null)
+            .ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.OrdinalIgnoreCase);
 
     private static bool IsTelemetryUrl(string url) =>
         TelemetryEndpoints.SdkPattern.IsMatch(url) || TelemetryEndpoints.Pattern.IsMatch(url);
