@@ -64,6 +64,10 @@ public partial class BrowserTelemetryTests : AcceptanceTestBase
     {
         var sdkRequests = new ConcurrentQueue<string>();
         var servedSettings = new ConcurrentQueue<string>();
+        // A deployed server has a connection string of its own, so the page the fixture opened loads the SDK too.
+        // That load has to be over before the routes below go in: only the reload under test is counted.
+        await Page.GetByTestId(nameof(MainLayout.Elements.CopyrightFooter)).WaitForAsync();
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         // The suite's one server has no connection string, so the browser is handed what a server that has one
         // generates: the settings this server serves, merged by the server's own code (ClientSettings).
         await Page.RouteAsync($"**{ClientSettings.RequestPath}", async route =>
