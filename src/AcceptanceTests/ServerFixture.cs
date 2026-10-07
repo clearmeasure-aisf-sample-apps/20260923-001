@@ -264,7 +264,7 @@ public class ServerFixture
     {
         var connectionString = GetSqlConnectionString();
         var useSqlite = IsSqliteConnection(connectionString);
-        _serverProcess = CreateDotnetProcess(ProjectPath, BuildServerArguments(useSqlite));
+        _serverProcess = CreateDotnetProcess(ProjectPath, BuildServerArguments());
         ConfigureServerEnvironment(_serverProcess, useSqlite, connectionString);
         AttachProcessLogging(_serverProcess, "Server");
         _serverProcess.Start();
@@ -273,20 +273,23 @@ public class ServerFixture
         await WaitUntilUrlReady(ApplicationBaseUrl);
     }
 
-    private static string BuildServerArguments(bool useSqlite)
-    {
-        var config = BuildConfiguration;
-        return useSqlite
-            ? $"run --no-build --configuration {config} --no-launch-profile --urls={ApplicationBaseUrl}"
-            : $"run --no-build --configuration {config} --urls={ApplicationBaseUrl}";
-    }
+    // No launch profile in either database mode: dotnet run puts a profile's environment variables over the ones
+    // set here, and the UI.Server profile carries a development Application Insights connection string.
+    private static string BuildServerArguments() =>
+        $"run --no-build --configuration {BuildConfiguration} --no-launch-profile --urls={ApplicationBaseUrl}";
 
     private static void ConfigureServerEnvironment(Process process, bool useSqlite, string connectionString)
     {
+        process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         process.StartInfo.Environment["DISABLE_AUTO_CANCEL_AGENT"] = "true";
         process.StartInfo.Environment["ApiKeyAuthentication__Enabled"] = "false";
         process.StartInfo.Environment["LocalTelemetry__Enabled"] = "false";
         process.StartInfo.Environment["ApiKeyAuthentication__ValidationKey"] = "";
+        // The server hands a real connection string of its own to the browser, which then loads the telemetry SDK
+        // (ClientSettings in UI.Server). The placeholder is the first value the server reads, whatever the machine
+        // has set, so neither the suite's server nor its browsers send telemetry.
+        process.StartInfo.Environment["APPLICATIONINSIGHTS_CONNECTION_STRING"] =
+            "InstrumentationKey=00000000-0000-0000-0000-000000000000";
         if (useSqlite)
         {
             ApplySqliteServerEnvironment(process, connectionString);
@@ -295,9 +298,6 @@ public class ServerFixture
 
     private static void ApplySqliteServerEnvironment(Process process, string connectionString)
     {
-        process.StartInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
-        process.StartInfo.Environment["APPLICATIONINSIGHTS_CONNECTION_STRING"] =
-            "InstrumentationKey=00000000-0000-0000-0000-000000000000";
         process.StartInfo.Environment["ConnectionStrings__SqlConnectionString"] =
             ResolveSqliteConnectionString(connectionString);
     }

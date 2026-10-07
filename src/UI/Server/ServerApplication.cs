@@ -189,6 +189,7 @@ public static class ServerApplication
         }
         app.UseRequestDecompression();
         app.UseResponseCompression();
+        app.UseClientSettings();
         app.UseBlazorFrameworkFiles();
         app.UseStaticFiles();
         app.UseRouting();
