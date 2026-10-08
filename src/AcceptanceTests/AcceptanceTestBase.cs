@@ -134,7 +134,10 @@ public abstract class AcceptanceTestBase
                 await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
                 break;
             }
-            catch (PlaywrightException) when (attempt < maxRetries)
+            // A stalled first page load ends in System.TimeoutException, which is not a PlaywrightException:
+            // both get another attempt.
+            catch (Exception exception) when (attempt < maxRetries
+                                              && exception is PlaywrightException or TimeoutException)
             {
                 await Task.Delay(2000);
             }
