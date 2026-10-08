@@ -14,6 +14,7 @@ public class ClientSettingsEndpointIntegrationTests
     private const string LocalEndpoints = ";IngestionEndpoint=https://localhost:1/;LiveEndpoint=https://localhost:1/";
     private const string RealConnectionString = "InstrumentationKey=3f2c9a51-7d1e-4b8a-9c64-2a5e8f0b1d37" + LocalEndpoints;
     private const string PlaceholderConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000" + LocalEndpoints;
+    private const string InvalidSamplingPercentage = "a-quarter";
 
     private static string StaticSettingsFile => Path.Combine(
         ClientSettingsWebApplicationFactory.ClientWebRoot, ClientSettings.FileName);
@@ -35,18 +36,100 @@ public class ClientSettingsEndpointIntegrationTests
         BrowserTelemetry.IsConfigured(settings[BrowserTelemetry.ConnectionStringKey]).ShouldBeTrue();
     }
 
-    [Test]
-    public async Task Should_ServeNoOtherServerConfiguration_When_ServerHasARealConnectionString()
+    [TestCase(null)]
+    [TestCase("0")]
+    [TestCase("25")]
+    [TestCase(InvalidSamplingPercentage)]
+    public async Task Should_ServeNoOtherServerConfiguration_When_ServerHasARealConnectionString(
+        string? samplingPercentage)
     {
-        await using var factory = new ClientSettingsWebApplicationFactory(RealConnectionString);
+        await using var factory = new ClientSettingsWebApplicationFactory(RealConnectionString, samplingPercentage);
         using var client = factory.CreateClient();
+        var allowed = Settings(await File.ReadAllTextAsync(StaticSettingsFile)).Keys
+            .Append(BrowserTelemetry.ConnectionStringKey)
+            .Append(BrowserTelemetry.SamplingPercentageKey);
 
         var body = await client.GetStringAsync(ClientSettings.RequestPath);
 
         body.ShouldNotContain(ClientSettingsWebApplicationFactory.ServerApiKey);
         body.ShouldNotContain(ClientSettingsWebApplicationFactory.ServerOpenAiKey);
         body.ShouldNotContain(ClientSettingsWebApplicationFactory.ServerSqlConnectionString);
-        Settings(body)["ApiKeyAuthentication:ValidationKey"].ShouldBe(string.Empty);
+        body.ShouldNotContain(InvalidSamplingPercentage);
+        var settings = Settings(body);
+        settings["ApiKeyAuthentication:ValidationKey"].ShouldBe(string.Empty);
+        settings.Keys.ShouldBeSubsetOf(allowed);
+    }
+
+    [Test]
+    public async Task Should_ServeExactlyTheSettingsOfAServerWithoutASamplingPercentage_When_NoneIsConfigured()
+    {
+        await using var factory = new ClientSettingsWebApplicationFactory(RealConnectionString);
+        using var client = factory.CreateClient();
+        var expected = ClientSettings.Merge(await File.ReadAllTextAsync(StaticSettingsFile), RealConnectionString);
+
+        var body = await client.GetByteArrayAsync(ClientSettings.RequestPath);
+
+        body.ShouldBe(Encoding.UTF8.GetBytes(expected.ShouldNotBeNull()));
+        Settings(Encoding.UTF8.GetString(body)).ShouldNotContainKey(BrowserTelemetry.SamplingPercentageKey);
+        factory.Warnings.ShouldNotContain(warning => warning.Contains(BrowserTelemetry.SamplingPercentageKey));
+    }
+
+    [TestCase("0")]
+    [TestCase("25")]
+    [TestCase("12.5")]
+    [TestCase("100")]
+    public async Task Should_AddTheSamplingPercentageToTheClientSettings_When_ServerHasOne(string samplingPercentage)
+    {
+        await using var factory = new ClientSettingsWebApplicationFactory(RealConnectionString, samplingPercentage);
+        using var client = factory.CreateClient();
+        var expected = Settings(await File.ReadAllTextAsync(StaticSettingsFile));
+        expected[BrowserTelemetry.ConnectionStringKey] = RealConnectionString;
+        expected[BrowserTelemetry.SamplingPercentageKey] = samplingPercentage;
+
+        var response = await client.GetAsync(ClientSettings.RequestPath);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        Settings(await response.Content.ReadAsStringAsync()).ShouldBe(expected, ignoreOrder: true);
+        factory.Warnings.ShouldNotContain(warning => warning.Contains(BrowserTelemetry.SamplingPercentageKey));
+    }
+
+    [TestCase(InvalidSamplingPercentage)]
+    [TestCase("150")]
+    [TestCase("-1")]
+    public async Task Should_ServeNoSamplingPercentageAndWarnOnceAtStartUp_When_ServersValueIsNotANumberFrom0To100(
+        string samplingPercentage)
+    {
+        await using var factory = new ClientSettingsWebApplicationFactory(RealConnectionString, samplingPercentage);
+        using var client = factory.CreateClient();
+        var expected = ClientSettings.Merge(await File.ReadAllTextAsync(StaticSettingsFile), RealConnectionString);
+        var warningsAtStartUp = SamplingWarnings(factory);
+
+        var first = await client.GetStringAsync(ClientSettings.RequestPath);
+        var second = await client.GetStringAsync(ClientSettings.RequestPath);
+        using var head = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, ClientSettings.RequestPath));
+
+        first.ShouldBe(expected);
+        second.ShouldBe(expected);
+        warningsAtStartUp.ShouldHaveSingleItem().ShouldContain(samplingPercentage);
+        SamplingWarnings(factory).ShouldBe(warningsAtStartUp);
+    }
+
+    [TestCase("0")]
+    [TestCase("25")]
+    [TestCase(InvalidSamplingPercentage)]
+    public async Task Should_ServeTheStaticClientSettingsUnchanged_When_ServerHasASamplingPercentageButNoRealConnectionString(
+        string samplingPercentage)
+    {
+        await using var factory =
+            new ClientSettingsWebApplicationFactory(PlaceholderConnectionString, samplingPercentage);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync(ClientSettings.RequestPath);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsByteArrayAsync()).ShouldBe(await File.ReadAllBytesAsync(StaticSettingsFile));
+        response.Headers.CacheControl.ShouldBeNull();
+        SamplingWarnings(factory).Length.ShouldBe(samplingPercentage == InvalidSamplingPercentage ? 1 : 0);
     }
 
     [Test]
@@ -106,6 +189,9 @@ public class ClientSettingsEndpointIntegrationTests
             .ShouldBe(await File.ReadAllBytesAsync(Path.Combine(ClientSettingsWebApplicationFactory.ClientWebRoot, "index.html")));
         response.Headers.CacheControl.ShouldBeNull();
     }
+
+    private static string[] SamplingWarnings(ClientSettingsWebApplicationFactory factory) =>
+        factory.Warnings.Where(warning => warning.Contains(BrowserTelemetry.SamplingPercentageKey)).ToArray();
 
     // Reads settings the way the client does: through the JSON configuration provider.
     private static Dictionary<string, string?> Settings(string json) =>
