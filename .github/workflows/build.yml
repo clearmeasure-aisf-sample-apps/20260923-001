@@ -498,10 +498,34 @@ jobs:
           path: build/test/**/*.trx
           retention-days: 2
 
+  # A job-level `if` cannot read the secrets context, so this job answers one question for "Publish Release
+  # Candidate": is the Azure login that job needs configured here? The expression below is evaluated before the
+  # step starts, so the step is handed only "true" or "false": the secret's value is never passed to the step,
+  # printed or written to an output.
+  detect-azure-login:
+    name: Detect Azure login
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      configured: ${{ steps.detect.outputs.configured }}
+    steps:
+      - name: Detect Azure login
+        id: detect
+        env:
+          CONFIGURED: ${{ secrets.AZURE_CREDENTIALS != '' }}
+        run: echo "configured=${CONFIGURED}" >> "$GITHUB_OUTPUT"
+
   docker-build-image-for-churchbulletin-ui:
     name: Publish Release Candidate
-    needs: [changes, build-linux]
-    if: success() && needs.changes.outputs.code == 'true' 
+    needs: [changes, build-linux, detect-azure-login]
+    # Skipped on a branch where the Azure login is not configured: "Login to Azure" below can only fail there.
+    # On master the job runs either way, as it always has. Without the login it fails there, the Build run ends
+    # in failure, and deploy.yml, which starts only when a Build run on master succeeds, stays skipped. Skipping
+    # the job on master would let that run succeed and start deploy.yml, whether or not its own settings
+    # (Octopus, Azure) are configured. Drop the master clause once deploy.yml is gated on its own configuration.
+    if: success() && needs.changes.outputs.code == 'true' && (needs.detect-azure-login.outputs.configured == 'true' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     concurrency:
       # Cancelled when a newer job arrives on the same non-master branch/PR; on master,
