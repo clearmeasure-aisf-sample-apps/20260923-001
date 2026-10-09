@@ -22,13 +22,25 @@ public class IndexHtmlTelemetryScriptTests
     [Test]
     public void IndexHtml_TelemetryScript_ShouldDefineTheStartFunctionTheClientCalls()
     {
-        _markup.ShouldContain($"window.{BrowserTelemetry.StartFunction} = function (connectionString) {{");
+        _markup.ShouldContain(
+            $"window.{BrowserTelemetry.StartFunction} = function (connectionString, samplingPercentage) {{");
     }
 
     [Test]
-    public void IndexHtml_TelemetryScript_ShouldNotStartWithoutAConnectionString()
+    public void IndexHtml_TelemetryScript_ShouldNotStartWithoutAConnectionStringOrWithASamplingPercentageOf0()
     {
-        _markup.ShouldContain("if (!connectionString || window.appInsights) { return; }");
+        _markup.ShouldContain(
+            "if (!connectionString || window.appInsights || samplingPercentage === 0) { return; }");
+    }
+
+    [Test]
+    public void IndexHtml_TelemetryScript_ShouldGiveTheSdkASamplingPercentageOnlyWhenThereIsOne()
+    {
+        _markup.ShouldContain(
+            "var sdkSettings = { connectionString: connectionString, enableAutoRouteTracking: true };");
+        _markup.ShouldContain(
+            "if (typeof samplingPercentage === \"number\") { sdkSettings.samplingPercentage = samplingPercentage; }");
+        _markup.ShouldContain("cfg: sdkSettings");
     }
 
     [Test]

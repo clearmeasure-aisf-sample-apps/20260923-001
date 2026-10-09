@@ -4,6 +4,7 @@ using ClearMeasure.Bootcamp.UI.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using Shouldly;
 
@@ -86,6 +87,155 @@ public class ClientSettingsTests
             (BrowserTelemetry.ConnectionStringKey, RealConnectionString));
 
         ClientSettings.BrowserConnectionString(configuration).ShouldBe(RealConnectionString);
+    }
+
+    [TestCase("0", 0)]
+    [TestCase("25", 25)]
+    [TestCase("100", 100)]
+    [TestCase("12.5", 12.5)]
+    [TestCase("0.1", 0.1)]
+    [TestCase(" 50 ", 50)]
+    [TestCase("050", 50)]
+    [TestCase("0.00001", 0.00001)]
+    [TestCase("1e1", 10)]
+    public void BrowserSamplingPercentage_ShouldBeTheConfiguredNumber_WhenItIsFrom0To100(string value, double expected)
+    {
+        var logger = new StubLogger();
+        var configuration = Configuration((BrowserTelemetry.SamplingPercentageKey, value));
+
+        ClientSettings.BrowserSamplingPercentage(configuration, logger).ShouldBe(expected);
+
+        logger.Entries.ShouldBeEmpty();
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void BrowserSamplingPercentage_ShouldBeNullWithoutAWarning_WhenTheSettingIsNotThere(string? value)
+    {
+        var logger = new StubLogger();
+        var configuration = Configuration(
+            (BrowserTelemetry.SamplingPercentageKey, value),
+            (EnvironmentVariableKey, RealConnectionString));
+
+        ClientSettings.BrowserSamplingPercentage(configuration, logger).ShouldBeNull();
+
+        logger.Entries.ShouldBeEmpty();
+    }
+
+    [TestCase("-1")]
+    [TestCase("-0")]
+    [TestCase("+25")]
+    [TestCase("100.1")]
+    [TestCase("101")]
+    [TestCase("1000")]
+    [TestCase("abc")]
+    [TestCase("25%")]
+    [TestCase("25 percent")]
+    [TestCase("2 5")]
+    [TestCase("1,5")]
+    [TestCase("1e3")]
+    [TestCase("0x10")]
+    [TestCase("NaN")]
+    [TestCase("Infinity")]
+    [TestCase("true")]
+    public void BrowserSamplingPercentage_ShouldBeNullWithOneWarning_WhenTheValueIsNotANumberFrom0To100(string value)
+    {
+        var logger = new StubLogger();
+        var configuration = Configuration((BrowserTelemetry.SamplingPercentageKey, value));
+
+        ClientSettings.BrowserSamplingPercentage(configuration, logger).ShouldBeNull();
+
+        var entry = logger.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Warning);
+        entry.Message.ShouldContain(BrowserTelemetry.SamplingPercentageKey);
+        entry.Message.ShouldContain($" is {value}, ");
+    }
+
+    [Test]
+    public void BrowserSamplingPercentage_ShouldReadOnlyItsOwnKey_WhenTheServerHoldsOtherNumbers()
+    {
+        var logger = new StubLogger();
+        var configuration = Configuration(
+            ("ApplicationInsights:SamplingPercentage", "10"),
+            ("BrowserSamplingPercentage", "20"),
+            ("SamplingPercentage", "30"));
+
+        ClientSettings.BrowserSamplingPercentage(configuration, logger).ShouldBeNull();
+
+        logger.Entries.ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Merge_ShouldBeExactlyWhatItWasBeforeThereWasASamplingPercentage_WhenNoneIsGiven()
+    {
+        const string staticSettings = """{ "ApiKeyAuthentication": { "ValidationKey": "" } }""";
+        string[] expected =
+        [
+            "{",
+            """  "ApiKeyAuthentication": {""",
+            """    "ValidationKey": "" """.TrimEnd(),
+            "  },",
+            """  "ApplicationInsights": {""",
+            $"""    "ConnectionString": "{RealConnectionString}" """.TrimEnd(),
+            "  }",
+            "}"
+        ];
+
+        var merged = ClientSettings.Merge(staticSettings, RealConnectionString);
+
+        merged.ShouldBe(string.Join(Environment.NewLine, expected));
+    }
+
+    [TestCase(0, "0")]
+    [TestCase(25, "25")]
+    [TestCase(100, "100")]
+    [TestCase(12.5, "12.5")]
+    [TestCase(0.1, "0.1")]
+    [TestCase(0.00001, "1E-05")]
+    public void Merge_ShouldAddTheSamplingPercentageBesideTheConnectionString_WhenOneIsGiven(
+        double samplingPercentage, string expected)
+    {
+        const string staticSettings = """{ "ApiKeyAuthentication": { "ValidationKey": "client-key" } }""";
+
+        var merged = ClientSettings.Merge(staticSettings, RealConnectionString, samplingPercentage);
+
+        var settings = Settings(merged);
+        settings.ShouldBe(new Dictionary<string, string?>
+        {
+            ["ApiKeyAuthentication:ValidationKey"] = "client-key",
+            [BrowserTelemetry.ConnectionStringKey] = RealConnectionString,
+            [BrowserTelemetry.SamplingPercentageKey] = expected
+        }, ignoreOrder: true);
+        BrowserTelemetry.SamplingPercentage(settings[BrowserTelemetry.SamplingPercentageKey])
+            .ShouldBe(samplingPercentage);
+    }
+
+    [TestCase("""{ "ApplicationInsights": { "BrowserSamplingPercentage": 75 } }""")]
+    [TestCase("""{ "applicationinsights": { "browsersamplingpercentage": "0" } }""")]
+    [TestCase("""{ "ApplicationInsights": { "BrowserSamplingPercentage": { "Nested": 1 } } }""")]
+    public void Merge_ShouldReplaceTheSamplingPercentage_WhenStaticSettingsAlreadyNameTheKey(string staticSettings)
+    {
+        var merged = ClientSettings.Merge(staticSettings, RealConnectionString, 25);
+
+        var settings = new Dictionary<string, string?>(Settings(merged), StringComparer.OrdinalIgnoreCase);
+        settings.Count.ShouldBe(2);
+        settings[BrowserTelemetry.ConnectionStringKey].ShouldBe(RealConnectionString);
+        settings[BrowserTelemetry.SamplingPercentageKey].ShouldBe("25");
+    }
+
+    [Test]
+    public void Merge_ShouldKeepTheSamplingPercentageOfTheStaticSettings_WhenNoneIsGiven()
+    {
+        const string staticSettings = """{ "ApplicationInsights": { "BrowserSamplingPercentage": 75 } }""";
+
+        var merged = ClientSettings.Merge(staticSettings, RealConnectionString);
+
+        Settings(merged).ShouldBe(new Dictionary<string, string?>
+        {
+            [BrowserTelemetry.ConnectionStringKey] = RealConnectionString,
+            [BrowserTelemetry.SamplingPercentageKey] = "75"
+        }, ignoreOrder: true);
     }
 
     [Test]
@@ -193,6 +343,25 @@ public class ClientSettingsTests
         Body(context).ShouldBe(method == "GET" ? expected : string.Empty);
     }
 
+    [TestCase(0, "0")]
+    [TestCase(25, "25")]
+    public async Task InvokeAsync_ShouldAnswerWithTheSamplingPercentage_WhenTheServerHasOne(
+        double samplingPercentage, string expected)
+    {
+        const string staticSettings = """{ "ApiKeyAuthentication": { "ValidationKey": "" } }""";
+        var context = Request("GET", ClientSettings.RequestPath);
+
+        var passedOn = await InvokeAsync(context, new StubWebRoot(staticSettings), samplingPercentage);
+
+        passedOn.ShouldBeFalse();
+        Settings(Body(context)).ShouldBe(new Dictionary<string, string?>
+        {
+            ["ApiKeyAuthentication:ValidationKey"] = "",
+            [BrowserTelemetry.ConnectionStringKey] = RealConnectionString,
+            [BrowserTelemetry.SamplingPercentageKey] = expected
+        }, ignoreOrder: true);
+    }
+
     [Test]
     public async Task InvokeAsync_ShouldAnswerWithOnlyTheConnectionString_WhenThereIsNoStaticSettingsFile()
     {
@@ -236,14 +405,15 @@ public class ClientSettingsTests
         Body(context).ShouldBeEmpty();
     }
 
-    private static async Task<bool> InvokeAsync(HttpContext context, IFileProvider webRoot)
+    private static async Task<bool> InvokeAsync(
+        HttpContext context, IFileProvider webRoot, double? samplingPercentage = null)
     {
         var passedOn = false;
         await ClientSettingsPipeline.InvokeAsync(context, _ =>
         {
             passedOn = true;
             return Task.CompletedTask;
-        }, webRoot, RealConnectionString);
+        }, webRoot, new BrowserTelemetrySettings(RealConnectionString, samplingPercentage));
         return passedOn;
     }
 
@@ -280,6 +450,25 @@ public class ClientSettingsTests
         Path.GetFullPath(Path.Combine(
             TestContext.CurrentContext.TestDirectory,
             "..", "..", "..", "..", "UI", "Client", "wwwroot", ClientSettings.FileName));
+
+    private sealed class StubLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, formatter(state, exception)));
+        }
+    }
 
     private sealed class StubWebRoot(string settings) : IFileProvider
     {

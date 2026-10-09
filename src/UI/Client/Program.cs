@@ -16,7 +16,11 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddSingleton<IHostEnvironment>(new WasmHostEnvironment(builder.HostEnvironment));
 var configurationModel = new ConfigurationModel
-    { AppInsightsConnectionString = builder.Configuration[BrowserTelemetry.ConnectionStringKey] };
+{
+    AppInsightsConnectionString = builder.Configuration[BrowserTelemetry.ConnectionStringKey],
+    AppInsightsSamplingPercentage =
+        BrowserTelemetry.SamplingPercentage(builder.Configuration[BrowserTelemetry.SamplingPercentageKey])
+};
 
 builder.Services.AddBrowserTelemetry(configurationModel);
 
