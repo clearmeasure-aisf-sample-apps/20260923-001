@@ -520,12 +520,10 @@ jobs:
   docker-build-image-for-churchbulletin-ui:
     name: Publish Release Candidate
     needs: [changes, build-linux, detect-azure-login]
-    # Skipped on a branch where the Azure login is not configured: "Login to Azure" below can only fail there.
-    # On master the job runs either way, as it always has. Without the login it fails there, the Build run ends
-    # in failure, and deploy.yml, which starts only when a Build run on master succeeds, stays skipped. Skipping
-    # the job on master would let that run succeed and start deploy.yml, whether or not its own settings
-    # (Octopus, Azure) are configured. Drop the master clause once deploy.yml is gated on its own configuration.
-    if: success() && needs.changes.outputs.code == 'true' && (needs.detect-azure-login.outputs.configured == 'true' || github.ref == 'refs/heads/master')
+    # Skipped where the Azure login is not configured, master included: "Login to Azure" below can only fail
+    # there. A Build run on master then succeeds and starts deploy.yml, whose "Deploy gate" skips the deployment
+    # where its own Octopus settings are not configured.
+    if: success() && needs.changes.outputs.code == 'true' && needs.detect-azure-login.outputs.configured == 'true'
     runs-on: ubuntu-latest
     concurrency:
       # Cancelled when a newer job arrives on the same non-master branch/PR; on master,

@@ -3,8 +3,9 @@ using Shouldly;
 namespace ClearMeasure.Bootcamp.UnitTests.BuildGates;
 
 /// <summary>
-/// "Publish Release Candidate" logs in to Azure. On a branch where that login is not configured the job is skipped,
-/// on the word of a job that reports only whether the login's secret is set. On master it runs either way.
+/// "Publish Release Candidate" logs in to Azure. Where that login is not configured the job is skipped, on the word
+/// of a job that reports only whether the login's secret is set. That lets a Build run on master succeed, which
+/// starts the Deploy workflow; its gate skips the deployment where its own Octopus settings are not configured.
 /// </summary>
 [TestFixture]
 public class ReleaseCandidateAzureLoginTests
@@ -14,13 +15,17 @@ public class ReleaseCandidateAzureLoginTests
     private const string LoginSecret = "secrets.AZURE_CREDENTIALS";
     private const string NeedsLine = $"    needs: [changes, build-linux, {DetectJob}]";
     private const string LoginConfigured = $"needs.{DetectJob}.outputs.configured == 'true'";
-    private const string OnMaster = "github.ref == 'refs/heads/master'";
+    private const string DeployGateJob = "resolve-deploy-gate";
 
     private const string IfLine =
-        $"    if: success() && needs.changes.outputs.code == 'true' && ({LoginConfigured} || {OnMaster})";
+        $"    if: success() && needs.changes.outputs.code == 'true' && {LoginConfigured}";
+
+    private const string OctopusConfiguredLine =
+        "          OCTOPUS_CONFIGURED: ${{ secrets.OCTO_API_KEY != '' && secrets.OCTOPUS_URL != '' "
+        + "&& vars.OCTOPUS_SPACE != '' && vars.OCTOPUS_PROJECT != '' }}";
 
     [Test]
-    public void ShouldSkipReleaseCandidateJobOnABranchWithoutAzureLogin_WhenBuildWorkflowIsRead()
+    public void ShouldSkipReleaseCandidateJobWithoutAzureLogin_WhenBuildWorkflowIsRead()
     {
         var job = ReadJob(ReleaseCandidateJob);
 
@@ -30,21 +35,30 @@ public class ReleaseCandidateAzureLoginTests
     }
 
     /// <summary>
-    /// The Deploy workflow starts when a Build run on master succeeds. Without the Azure login that run fails in
-    /// "Publish Release Candidate", and nothing else keeps Deploy from running; so on master the job is not skipped.
-    /// When this test fails because Deploy is gated some other way, the master clause can go.
+    /// The Deploy workflow starts when a Build run on master succeeds, and with the release-candidate job skipped
+    /// that run succeeds where nothing is configured. So the Deploy gate itself answers "no" where the workflow's
+    /// Octopus settings are not all there, before it reads anything, and the first environment job runs only on a
+    /// "yes". The gate's step is handed "true" or "false", never a secret's value.
     /// </summary>
     [Test]
-    public void ShouldKeepReleaseCandidateJobOnMaster_WhenDeployWorkflowStartsOnASuccessfulBuild()
+    public void ShouldSkipDeployWithoutOctopusSettings_WhenDeployWorkflowStartsOnASuccessfulBuild()
     {
-        var deploy = string.Join('\n', ReadWorkflow("deploy.yml"));
-        var jobCondition = ReadJob(ReleaseCandidateJob)
-            .Single(line => line.StartsWith("    if:", StringComparison.Ordinal));
+        var gate = ReadJob("deploy.yml", DeployGateJob);
+        var secretLines = gate
+            .Where(line => line.Contains("secrets.", StringComparison.Ordinal)
+                           && !line.Contains("secrets.GITHUB_TOKEN", StringComparison.Ordinal))
+            .ToArray();
+        var refusal = Array.IndexOf(gate, "          if [ \"${OCTOPUS_CONFIGURED}\" != \"true\" ]; then");
+        var firstRead = Array.FindIndex(gate, line => line.Contains("gh api", StringComparison.Ordinal));
+        var firstEnvironmentJob = string.Join('\n', ReadJob("deploy.yml", "deploy-to-tdd"));
 
-        deploy.ShouldContain("workflows: [\"Build\"]");
-        deploy.ShouldContain("branches: [master]");
-        deploy.ShouldContain("github.event.workflow_run.conclusion == 'success'");
-        jobCondition.ShouldEndWith($"|| {OnMaster})");
+        secretLines.ShouldHaveSingleItem().ShouldBe(OctopusConfiguredLine);
+        refusal.ShouldBeGreaterThan(-1);
+        gate[refusal + 2].ShouldBe("            echo \"should_deploy=false\" >> \"$GITHUB_OUTPUT\"");
+        gate[refusal + 3].ShouldBe("            exit 0");
+        firstRead.ShouldBeGreaterThan(refusal);
+        firstEnvironmentJob.ShouldContain($"    needs: [{DeployGateJob}]");
+        firstEnvironmentJob.ShouldContain($"needs.{DeployGateJob}.outputs.should_deploy == 'true'");
     }
 
     [Test]
@@ -84,7 +98,12 @@ public class ReleaseCandidateAzureLoginTests
 
     private static string[] ReadJob(string jobId)
     {
-        var lines = ReadWorkflow("build.yml");
+        return ReadJob("build.yml", jobId);
+    }
+
+    private static string[] ReadJob(string fileName, string jobId)
+    {
+        var lines = ReadWorkflow(fileName);
         var start = Array.IndexOf(lines, $"  {jobId}:");
         start.ShouldBeGreaterThan(-1, $"no job {jobId}");
         var end = Array.FindIndex(lines, start + 1, IsJobStart);

@@ -29,6 +29,11 @@ jobs:
   # Docs-only Build runs on master can conclude success with only the "Detect
   # code changes" job (no Integration Build artifacts). Do not create an Octopus
   # release or deploy from that path.
+  # Nor where this workflow's Octopus settings are not configured (a repository
+  # that is released another way): "TDD" could only post a pending status and
+  # fail at its first Octopus call. The expression below is evaluated before the
+  # step starts, so the step is handed only "true" or "false": no secret's value
+  # is passed to it, printed or written to an output.
   resolve-deploy-gate:
     name: Deploy gate
     if: >-
@@ -44,8 +49,14 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCTOPUS_CONFIGURED: ${{ secrets.OCTO_API_KEY != '' && secrets.OCTOPUS_URL != '' && vars.OCTOPUS_SPACE != '' && vars.OCTOPUS_PROJECT != '' }}
         run: |
           set -euo pipefail
+          if [ "${OCTOPUS_CONFIGURED}" != "true" ]; then
+            echo "The Octopus settings of this workflow are not all configured here (secrets OCTO_API_KEY and OCTOPUS_URL, variables OCTOPUS_SPACE and OCTOPUS_PROJECT). Skipping Deploy."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           RUN_ID="${{ github.event.workflow_run.id }}"
           echo "Inspecting artifacts for Build run ${RUN_ID}"
           should_deploy=false
