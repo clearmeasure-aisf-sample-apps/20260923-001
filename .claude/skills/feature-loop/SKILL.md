@@ -44,7 +44,7 @@ no Contents: write and no Commit statuses: read) is retried once with the `gh` t
 | `$B move <item> '<Column>'` | `board-status` dispatch to the environment repo; any answer but `204` posts the fallback `board-status:` comment | 0 moved, 1 refused (fallback posted) |
 | `$B status <pr\|sha>` | PR state, head, mergeable state, commit statuses of the head (and the merge commit) | 0 |
 | `$B deploy <merge-sha>` | the carrying Octopus release and its tdd/uat/prod task states | 0, 1 no release yet, 3 no key |
-| `$B wait ci <pr>` / `wait release <pr>` / `wait deploy <sha> <env>` | polls at the configured interval, prints only changes | 0 success, 1 failure, 4 timeout |
+| `$B wait ci <pr> -Head <sha>` / `wait release <pr>` / `wait deploy <sha> <env>` | polls at the configured interval, prints only changes; `-Head` is the commit just pushed: the result of any other head is never the answer (reference.md "Waiting on the right head") | 0 success, 1 failure, 4 timeout |
 | `$B tree <item>` | sub-issue tree (both repos) and the children-first order | 0 |
 
 Exit 2 is a usage error. Run `wait` with `run_in_background: true`; its exit wakes the session.
@@ -61,7 +61,7 @@ change still ships through a release, so the deployment columns apply).
 | (start) | `$B tree <item>`; finish every open descendant first | the printed order has no open child of #N | app: `$B move <item> Todo` |
 | Todo | one design comment: problem, approach, acceptance criteria, test plan per layer, risks; app: Onion layers; env: paths, `checksByPath` checks, TB rules at stake, `gitops/` yes/no | the comment exists | `$B move <item> 'In Progress'` |
 | In Progress | branch `{username}/{branch-description}` from the default branch; code + tests; gates (below); merge the default branch in; push; PR body `Refs #N` | `$B status <pr>`: open, `mergeable=clean` | `$B move <item> 'In Review'` (app: the PR too) |
-| In Review | CI; triage every bot finding (fix, or decline with a one-line PR reply); merge with `mergeMethod` | app: `$B wait ci <pr>` exit 0, then merged. env: gate summary in the PR body, merged | app: `$B wait release <pr>` exit 0. env: Argo CD check if `gitops/` changed (reference.md), then close |
+| In Review | CI; triage every bot finding (fix, or decline with a one-line PR reply); merge with `mergeMethod` | app: `$B wait ci <pr> -Head <pushed-sha>` exit 0, then merged. env: gate summary in the PR body, merged | app: `$B wait release <pr>` exit 0. env: Argo CD check if `gitops/` changed (reference.md), then close |
 | Deployed to TDD | - | `$B wait deploy <merge-sha> tdd` exit 0 | `$B move <item> 'Deployed to TDD'` |
 | Deployed to UAT | - | `$B wait deploy <merge-sha> uat` exit 0 | `$B move <item> 'Deployed to UAT'` |
 | Deployed to Prod | - | `$B wait deploy <merge-sha> prod` exit 0 | `$B move <item> 'Deployed to Prod'`; close with the evidence comment; app: `$B move <item> Done` |
@@ -117,6 +117,8 @@ column's comment when one is posted anyway. A refused move never stops the loop.
 
 - Wait with `$B wait ...` in the background, never a per-minute hand loop; after every
   resumption re-check with one `$B status` / `$B deploy` before acting.
+- After a push, wait with the commit you pushed (`$B wait ci <pr> -Head "$(git rev-parse HEAD)"`): for a moment GitHub
+  still names the previous head, and a wait without `-Head` can exit with that head's finished result.
 - No observable progress for 20 minutes, or a deadline passed: check state once, then act or
   report `STATUS: BLOCKED` (recovery: reference.md "Failures").
 - GitHub MCP tools: `minimal_output: true` and `perPage` 5-10 unless a full body is needed.
