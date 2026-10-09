@@ -326,6 +326,31 @@ public abstract class AcceptanceTestBase
         await Expect(woNumberLocator).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
     }
 
+    /// <summary>
+    /// Opens a work order's manage page in Edit mode with a full page load and waits until the page shows the work
+    /// order's number. A load after which the page never renders is reloaded once: one such load stalled in CI for a
+    /// cause that is not known (#68). When the reloaded page does not render either, its wait fails the test.
+    /// </summary>
+    protected async Task NavigateToManageEditAsync(string workOrderNumber)
+    {
+        await Page.GotoAsync($"/workorder/manage/{workOrderNumber}?mode=Edit");
+        var woNumberLocator = Page.GetByTestId(nameof(WorkOrderManage.Elements.WorkOrderNumber));
+        var renderWait = new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 };
+        try
+        {
+            await Expect(woNumberLocator).ToBeVisibleAsync(renderWait);
+        }
+        // Expect(...) reports its timeout as a PlaywrightException, not as System.TimeoutException.
+        catch (PlaywrightException)
+        {
+            TestContext.Out.WriteLine($"Manage page of work order {workOrderNumber} did not render; reloading it once.");
+            await Page.ReloadAsync();
+            await Expect(woNumberLocator).ToBeVisibleAsync(renderWait);
+        }
+
+        await Expect(woNumberLocator).ToHaveTextAsync(workOrderNumber);
+    }
+
     protected async Task Input(string elementTestId, string? value)
     {
         var locator = Page.GetByTestId(elementTestId);

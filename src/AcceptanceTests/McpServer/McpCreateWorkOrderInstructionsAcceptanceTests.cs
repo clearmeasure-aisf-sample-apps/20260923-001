@@ -163,12 +163,4 @@ public class McpCreateWorkOrderInstructionsAcceptanceTests : AcceptanceTestBase
         await Expect(Page.GetByTestId(nameof(Logout.Elements.WelcomeText)))
             .ToHaveTextAsync("Welcome tlovejoy!");
     }
-
-    private async Task NavigateToManageEditAsync(string workOrderNumber)
-    {
-        await Page.GotoAsync($"/workorder/manage/{workOrderNumber}?mode=Edit");
-        var woNumberLocator = Page.GetByTestId(nameof(WorkOrderManage.Elements.WorkOrderNumber));
-        await Expect(woNumberLocator).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
-        await Expect(woNumberLocator).ToHaveTextAsync(workOrderNumber);
-    }
 }

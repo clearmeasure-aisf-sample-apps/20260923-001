@@ -167,15 +167,6 @@ public class McpGetWorkOrderInstructionsAcceptanceTests : AcceptanceTestBase
             .ToHaveTextAsync("Welcome tlovejoy!");
     }
 
-    private async Task NavigateToManageEditAsync(string workOrderNumber)
-    {
-        await Page.GotoAsync($"/workorder/manage/{workOrderNumber}?mode=Edit");
-        var workOrderNumberField = Page.GetByTestId(nameof(WorkOrderManage.Elements.WorkOrderNumber));
-        await Expect(workOrderNumberField)
-            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
-        await Expect(workOrderNumberField).ToHaveTextAsync(workOrderNumber);
-    }
-
     private Task<string> GetWorkOrderAsync(string workOrderNumber) =>
         Helper.CallToolDirectly("get-work-order",
             new Dictionary<string, object?> { ["workOrderNumber"] = workOrderNumber });
